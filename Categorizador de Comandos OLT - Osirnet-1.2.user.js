@@ -1,11 +1,16 @@
 // ==UserScript==
 // @name         Categorizador de Comandos OLT - Osirnet
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      1.2
 // @description  Categoriza visualmente os botões e injeta uma legenda de cores.
 // @author       Lucas Hackbart Döhnert
 // @match        https://*.osirnet.com.br/*
 // @grant        none
+// @license      MIT
+// @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
 (function() {
