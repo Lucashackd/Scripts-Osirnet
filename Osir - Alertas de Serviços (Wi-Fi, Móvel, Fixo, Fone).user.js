@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Osir - Alertas de Serviços (Wi-Fi, Móvel, Fixo, Fone)
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      2.3
 // @description  Verifica a tabela e exibe badges inteligentes com alto contraste e bordas completas. (CSS blindado)
 // @author       Lucas Hackbart Döhnert
@@ -8,8 +8,8 @@
 // @grant        none
 // @license      MIT
 // @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Alertas%20de%20Servi%C3%A7os%20(Wi-Fi%2C%20M%C3%B3vel%2C%20Fixo%2C%20Fone).user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Alertas%20de%20Servi%C3%A7os%20(Wi-Fi%2C%20M%C3%B3vel%2C%20Fixo%2C%20Fone).user.js
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
