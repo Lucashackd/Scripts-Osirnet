@@ -10,10 +10,10 @@
 // @match        *://*.osirnet.com.br/*
 // @grant        none
 // @license      MIT
-// @homepage     https://github.com/Lucashackd/Scripts-Osirnet
+// @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Acessar%20Contrato%20na%20Etiqueta.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Acessar%20Contrato%20na%20Etiqueta.user.js
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Acessar%20Contrato%20na%20Etiqueta.js
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Acessar%20Contrato%20na%20Etiqueta.js
 // ==/UserScript==
 
 (function() {
