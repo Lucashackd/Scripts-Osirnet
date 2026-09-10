@@ -12,8 +12,8 @@
 // @run-at       document-end
 // @license      MIT
 // @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/.user.js
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/.user.js
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Aproprias.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Aproprias.user.js
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
