@@ -9,6 +9,11 @@
 // @match        *://*.osirnet.com.br/ui/*/legacy/operations/*
 // @match        *://*.osirnet.com.br/*
 // @grant        none
+// @license      MIT
+// @homepage     https://github.com/Lucashackd/Scripts-Osirnet
+// @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Acessar%20Contrato%20na%20Etiqueta.js?utm_source=chatgpt.com
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Acessar%20Contrato%20na%20Etiqueta.js?utm_source=chatgpt.com
 // ==/UserScript==
 
 (function() {
