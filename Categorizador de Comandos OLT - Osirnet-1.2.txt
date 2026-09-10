@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.2
 // @description  Categoriza visualmente os botões e injeta uma legenda de cores.
-// @author       Você (Front-end Sênior)
+// @author       Lucas Hackbart Döhnert
 // @match        https://*.osirnet.com.br/*
 // @grant        none
 // ==/UserScript==
