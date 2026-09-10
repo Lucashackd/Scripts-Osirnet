@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      8.7
 // @description  Apropriação automática
-// @author       AlissonGuerreiro
+// @author       AlissonGuerreiro & Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/workspace/activities
 // @match        *://*.osirnet.com.br/*
 // @exclude      https://chat.osirnet.com.br/*
