@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Destaque de solicitações
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      1.8
+// @version      2.0
 // @description  Destaca as linhas da tabela por tipo de serviço e exibe legenda detalhada alinhada no ERP.
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/get_authentication_informations/*
@@ -24,51 +24,72 @@
         GREEN: '#a5d6a7',           // Ativação (Verde claro)
         GREEN_LIGHT: '#e8f5e9',     // Habilitação Fibra (Verde muito claro)
         BLUE: 'lightblue',          // Downgrade / Upgrade
-        SELECTED: '#141414'         // Linha selecionada (Preto suave)
+        SELECTED: '#141414'         // Linha mãe selecionada (Preto suave)
     };
 
-    // Injeta o CSS para garantir que a linha selecionada se sobressaia com texto branco
+    // Injeta o CSS garantindo que o estilo de seleção afete apenas as células diretas da linha mãe
     function injectSelectionStyles() {
         if (document.getElementById('custom-selection-styles')) return;
 
         const style = document.createElement('style');
         style.id = 'custom-selection-styles';
         style.textContent = `
-            #solicitations-table tbody tr.custom-selected,
-            #solicitations-table tbody tr.custom-selected td,
-            #solicitations-table tbody tr.custom-selected span,
-            #solicitations-table tbody tr.custom-selected i {
+            /* Anula seleções amarelas padrão da tabela */
+            #solicitations-table tbody tr.selected,
+            #solicitations-table tbody tr.active,
+            #solicitations-table tbody tr.row_selected {
+                background-color: transparent !important;
+            }
+
+            /* Estilo da linha mãe selecionada aplicável apenas às suas células diretas (> td) */
+            #solicitations-table tbody tr.custom-selected > td,
+            #solicitations-table tbody tr.custom-selected > td > span,
+            #solicitations-table tbody tr.custom-selected > td > i {
                 background-color: ${COLORS.SELECTED} !important;
                 color: #ffffff !important;
+            }
+
+            /* Reseta e protege o conteúdo interno da sub-linha expandida (.td-information) para manter visual original */
+            #solicitations-table tbody tr td.td-information {
+                background-color: #ffffff !important;
+                color: #333333 !important;
+            }
+
+            #solicitations-table tbody tr td.td-information * {
+                color: initial;
             }
         `;
         document.head.appendChild(style);
     }
 
-    // Configura a seleção da linha via clique usando delegação de eventos
+    // Configura a seleção da linha mãe ao clicar (ignorando sub-linhas e áreas de detalhes expandidas)
     function setupRowSelection() {
         if (document.body.dataset.selectionInitialized) return;
         document.body.dataset.selectionInitialized = 'true';
 
         document.addEventListener('click', (event) => {
+            // Evita disparar a seleção ao clicar dentro do conteúdo expandido (.td-information)
+            if (event.target.closest('td.td-information')) {
+                return;
+            }
+
+            // Seleciona a linha principal
             const row = event.target.closest('#solicitations-table tbody tr');
-            if (!row) return;
+            if (!row || row.querySelector('td.td-information')) return;
 
-            const wasSelected = row.classList.contains('custom-selected');
-
-            // Remove a seleção de outras linhas (seleção única)
-            document.querySelectorAll('#solicitations-table tbody tr.custom-selected').forEach(r => {
-                r.classList.remove('custom-selected');
+            // Remove seleções e turbações padrão do site de todas as linhas
+            document.querySelectorAll('#solicitations-table tbody tr').forEach(r => {
+                r.classList.remove('custom-selected', 'selected', 'active', 'row_selected');
             });
 
-            // Alterna a seleção da linha clicada
-            if (!wasSelected) {
-                row.classList.add('custom-selected');
-            }
+            // Aplica a seleção de forma fixa à linha clicada (não alterna para desligado)
+            row.classList.add('custom-selected');
+
+            highlightRows();
         });
     }
 
-    // Renderiza a legenda alinhada na mesma altura do filtro de pesquisa
+    // Renderiza a legenda alinhada à barra de busca
     function renderLegend() {
         const wrapper = document.getElementById('solicitations-table_wrapper');
         const filter = document.getElementById('solicitations-table_filter');
@@ -82,7 +103,6 @@
             display: inline-flex;
             align-items: center;
             gap: 12px;
-            margin-top: 4px;
             margin-bottom: 8px;
             padding: 4px 10px;
             background-color: #f8f9fa;
@@ -95,6 +115,7 @@
         `;
 
         legendContainer.innerHTML = `
+            <strong style="margin-right: 2px; color: #555;">Legenda:</strong>
             <span style="display: inline-flex; align-items: center; gap: 5px;">
                 <span style="width: 12px; height: 12px; background-color: ${COLORS.PINK}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Troca de Endereço
             </span>
@@ -122,11 +143,16 @@
         }
     }
 
-    // Função responsável por aplicar os destaques nas linhas
+    // Função responsável por aplicar os destaques apenas nas linhas mãe
     function highlightRows() {
         const rows = document.querySelectorAll('#solicitations-table tbody tr');
 
         rows.forEach(row => {
+            // Ignora se for sub-linha (.td-information) ou a linha mãe selecionada (preta)
+            if (row.classList.contains('custom-selected') || row.querySelector('td.td-information')) {
+                return;
+            }
+
             const cells = row.querySelectorAll('td');
 
             if (cells.length > 1) {
@@ -158,9 +184,10 @@
                     highlightColor = COLORS.BLUE;
                 }
 
-                // Aplica a cor de fundo se alguma regra for atendida
                 if (highlightColor) {
                     row.style.setProperty('background-color', highlightColor, 'important');
+                } else {
+                    row.style.removeProperty('background-color');
                 }
             }
         });
