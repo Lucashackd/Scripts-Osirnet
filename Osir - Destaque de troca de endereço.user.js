@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Osir - Destaque de troca de endereço
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      1.0
-// @description  Destaca as linhas da tabela que contêm "troca de endereço" na coluna Título.
+// @version      1.1
+// @description  Destaca as linhas da tabela que contêm "troca" e "endereço" na coluna Título.
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/get_authentication_informations/*
 // @grant        none
@@ -17,7 +17,7 @@
     'use strict';
 
     // Cor do fundo desejada (Azul Claro)
-    const HIGHLIGHT_COLOR = 'lightblue'; // Você também pode usar valores em Hex como '#add8e6' ou '#e0f7fa'
+    const HIGHLIGHT_COLOR = 'lightblue';
 
     // Função responsável por verificar e destacar as linhas
     function highlightAddressExchangeRows() {
@@ -29,10 +29,10 @@
 
             // Verifica se existe a coluna "Título" (índice 1 -> 2ª célula)
             if (cells.length > 1) {
-                const titleCellText = cells[1].textContent || cells[1].innerText;
+                const titleText = (cells[1].textContent || cells[1].innerText).toLowerCase();
 
-                // Transforma em minúsculas para garantir a busca independente de caixa
-                if (titleCellText.toLowerCase().includes('troca de endereço')) {
+                // Verifica se o texto contém AMBAS as palavras em qualquer ordem ou posição
+                if (titleText.includes('troca') && titleText.includes('endereço')) {
                     // Aplica a cor de fundo com !important para evitar sobrescrita pelo estilo da tabela
                     row.style.setProperty('background-color', HIGHLIGHT_COLOR, 'important');
                 }
@@ -44,7 +44,7 @@
     highlightAddressExchangeRows();
 
     // Observador (MutationObserver) para tratar atualizações dinâmicas, paginação e ordenação na tabela
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
         highlightAddressExchangeRows();
     });
 
