@@ -8,8 +8,8 @@
 // @grant        none
 // @license      MIT
 // @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Categorizador%20de%20Comandos%20OLT%20-%20Osirnet-1.2.user.js
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Categorizador%20de%20Comandos%20OLT%20-%20Osirnet-1.2.user.js
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Categorizador%20de%20Comandos%20OLT.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Categorizador%20de%20Comandos%20OLT.user.js
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
