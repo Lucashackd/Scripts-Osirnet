@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Destaque de solicitações
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      1.6
+// @version      1.7
 // @description  Destaca as linhas da tabela por tipo de serviço e exibe legenda detalhada alinhada no ERP.
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/get_authentication_informations/*
@@ -46,7 +46,6 @@
             padding: 4px 10px;
             background-color: #f8f9fa;
             border: 1px solid #dcdcdc;
-            border-radius: 4px;
             font-size: 12px;
             color: #333;
             flex-wrap: wrap;
