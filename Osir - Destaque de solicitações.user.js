@@ -41,6 +41,7 @@
             display: inline-flex;
             align-items: center;
             gap: 12px;
+            margin-top: 4px;
             margin-bottom: 8px;
             padding: 4px 10px;
             background-color: #f8f9fa;
