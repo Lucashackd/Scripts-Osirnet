@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Destacar Troca de Endereço - Osirnet ERP
+// @name         Osir - Destaque de troca de endereço
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      1.0
 // @description  Destaca as linhas da tabela que contêm "troca de endereço" na coluna Título.
