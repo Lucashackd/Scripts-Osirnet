@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Categorizador de Comandos OLT - Osirnet
+// @name         Osir - Categorizador de Comandos OLT
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      1.2
 // @description  Categoriza visualmente os botões e injeta uma legenda de cores.
