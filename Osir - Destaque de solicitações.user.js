@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Destaque de solicitações
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      1.7
+// @version      1.8
 // @description  Destaca as linhas da tabela por tipo de serviço e exibe legenda detalhada alinhada no ERP.
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/get_authentication_informations/*
@@ -23,15 +23,56 @@
         ORANGE_LIGHT: '#fff3e0',    // Apoio Manut. Fibra (Laranja mais claro)
         GREEN: '#a5d6a7',           // Ativação (Verde claro)
         GREEN_LIGHT: '#e8f5e9',     // Habilitação Fibra (Verde muito claro)
-        BLUE: 'lightblue'           // Downgrade / Upgrade
+        BLUE: 'lightblue',          // Downgrade / Upgrade
+        SELECTED: '#141414'         // Linha selecionada (Preto suave)
     };
+
+    // Injeta o CSS para garantir que a linha selecionada se sobressaia com texto branco
+    function injectSelectionStyles() {
+        if (document.getElementById('custom-selection-styles')) return;
+
+        const style = document.createElement('style');
+        style.id = 'custom-selection-styles';
+        style.textContent = `
+            #solicitations-table tbody tr.custom-selected,
+            #solicitations-table tbody tr.custom-selected td,
+            #solicitations-table tbody tr.custom-selected span,
+            #solicitations-table tbody tr.custom-selected i {
+                background-color: ${COLORS.SELECTED} !important;
+                color: #ffffff !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Configura a seleção da linha via clique usando delegação de eventos
+    function setupRowSelection() {
+        if (document.body.dataset.selectionInitialized) return;
+        document.body.dataset.selectionInitialized = 'true';
+
+        document.addEventListener('click', (event) => {
+            const row = event.target.closest('#solicitations-table tbody tr');
+            if (!row) return;
+
+            const wasSelected = row.classList.contains('custom-selected');
+
+            // Remove a seleção de outras linhas (seleção única)
+            document.querySelectorAll('#solicitations-table tbody tr.custom-selected').forEach(r => {
+                r.classList.remove('custom-selected');
+            });
+
+            // Alterna a seleção da linha clicada
+            if (!wasSelected) {
+                row.classList.add('custom-selected');
+            }
+        });
+    }
 
     // Renderiza a legenda alinhada na mesma altura do filtro de pesquisa
     function renderLegend() {
         const wrapper = document.getElementById('solicitations-table_wrapper');
         const filter = document.getElementById('solicitations-table_filter');
-
-        // Evita duplicar a legenda se ela já estiver presente no DOM
+        
         if (!wrapper || document.getElementById('solicitations-table-legend')) return;
 
         const legendContainer = document.createElement('div');
@@ -41,11 +82,11 @@
             display: inline-flex;
             align-items: center;
             gap: 12px;
-            margin-top: 4px;
             margin-bottom: 8px;
             padding: 4px 10px;
             background-color: #f8f9fa;
             border: 1px solid #dcdcdc;
+            border-radius: 4px;
             font-size: 12px;
             color: #333;
             flex-wrap: wrap;
@@ -53,6 +94,7 @@
         `;
 
         legendContainer.innerHTML = `
+            <strong style="margin-right: 2px; color: #555;">Legenda:</strong>
             <span style="display: inline-flex; align-items: center; gap: 5px;">
                 <span style="width: 12px; height: 12px; background-color: ${COLORS.PINK}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Troca de Endereço
             </span>
@@ -73,7 +115,6 @@
             </span>
         `;
 
-        // Insere a legenda antes do elemento de filtro para flutuarem lado a lado na mesma altura
         if (filter) {
             filter.parentNode.insertBefore(legendContainer, filter);
         } else {
@@ -125,8 +166,10 @@
         });
     }
 
-    // Função principal que orquestra a legenda e a pintura
+    // Função principal de atualização de UI
     function updateUI() {
+        injectSelectionStyles();
+        setupRowSelection();
         renderLegend();
         highlightRows();
     }
