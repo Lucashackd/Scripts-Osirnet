@@ -8,8 +8,8 @@
 // @grant        none
 // @license      MIT
 // @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Destaque%20de%20troca%20de%20endere%C3%A7o.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Destaque%20de%20troca%20de%20endere%C3%A7o.user.js
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
