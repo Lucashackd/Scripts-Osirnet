@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Osir - Destaque de solicitações
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      1.3
-// @description  Destaca as linhas da tabela de solicitações por tipo de serviço no ERP.
+// @version      1.6
+// @description  Destaca as linhas da tabela por tipo de serviço e exibe legenda detalhada alinhada no ERP.
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/get_authentication_informations/*
 // @grant        none
@@ -18,13 +18,71 @@
 
     // Definição das cores de destaque
     const COLORS = {
-        PINK: 'lightpink',      // Troca + Endereço (Rosa claro)
-        ORANGE: '#ffe0b2',     // Manutenção (Laranja claro)
-        GREEN: 'lightgreen',    // Ativação / Habilitação fibra (Verde claro)
-        BLUE: 'lightblue'       // Downgrade / Upgrade (Azul claro)
+        PINK: 'lightpink',           // Troca + Endereço
+        ORANGE: '#ffe0b2',          // Manutenção (Laranja claro)
+        ORANGE_LIGHT: '#fff3e0',    // Apoio Manut. Fibra (Laranja mais claro)
+        GREEN: '#a5d6a7',           // Ativação (Verde claro)
+        GREEN_LIGHT: '#e8f5e9',     // Habilitação Fibra (Verde muito claro)
+        BLUE: 'lightblue'           // Downgrade / Upgrade
     };
 
-    // Função responsável por aplicar os destaques
+    // Renderiza a legenda alinhada na mesma altura do filtro de pesquisa
+    function renderLegend() {
+        const wrapper = document.getElementById('solicitations-table_wrapper');
+        const filter = document.getElementById('solicitations-table_filter');
+
+        // Evita duplicar a legenda se ela já estiver presente no DOM
+        if (!wrapper || document.getElementById('solicitations-table-legend')) return;
+
+        const legendContainer = document.createElement('div');
+        legendContainer.id = 'solicitations-table-legend';
+        legendContainer.style.cssText = `
+            float: left;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+            padding: 4px 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #dcdcdc;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #333;
+            flex-wrap: wrap;
+            line-height: 22px;
+        `;
+
+        legendContainer.innerHTML = `
+            <strong style="margin-right: 2px; color: #555;">Legenda:</strong>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.PINK}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Troca de Endereço
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.ORANGE}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Manutenção
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.ORANGE_LIGHT}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Apoio Manut. Fibra
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.GREEN}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Ativação
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.GREEN_LIGHT}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Habilitação Fibra
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.BLUE}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Downgrade / Upgrade
+            </span>
+        `;
+
+        // Insere a legenda antes do elemento de filtro para flutuarem lado a lado na mesma altura
+        if (filter) {
+            filter.parentNode.insertBefore(legendContainer, filter);
+        } else {
+            wrapper.prepend(legendContainer);
+        }
+    }
+
+    // Função responsável por aplicar os destaques nas linhas
     function highlightRows() {
         const rows = document.querySelectorAll('#solicitations-table tbody tr');
 
@@ -39,15 +97,23 @@
                 if (titleText.includes('troca') && titleText.includes('endereço')) {
                     highlightColor = COLORS.PINK;
                 }
-                // 2. Manutenção (Laranja claro)
+                // 2. Apoio Manut. Fibra (Laranja mais claro)
+                else if (titleText.includes('apoio manut')) {
+                    highlightColor = COLORS.ORANGE_LIGHT;
+                }
+                // 3. Manutenção (Laranja claro)
                 else if (titleText.includes('manutenção')) {
                     highlightColor = COLORS.ORANGE;
                 }
-                // 3. Ativação OU "habilitação fibra" na sequência exata (Verde claro)
-                else if (titleText.includes('ativação') || titleText.includes('habilitação fibra')) {
+                // 4. Habilitação Fibra (Verde muito claro)
+                else if (titleText.includes('habilitação fibra')) {
+                    highlightColor = COLORS.GREEN_LIGHT;
+                }
+                // 5. Ativação (Verde claro)
+                else if (titleText.includes('ativação')) {
                     highlightColor = COLORS.GREEN;
                 }
-                // 4. Downgrade OU Upgrade (Azul claro)
+                // 6. Downgrade OU Upgrade (Azul claro)
                 else if (titleText.includes('downgrade') || titleText.includes('upgrade')) {
                     highlightColor = COLORS.BLUE;
                 }
@@ -60,12 +126,18 @@
         });
     }
 
-    // Executa no carregamento inicial da página
-    highlightRows();
+    // Função principal que orquestra a legenda e a pintura
+    function updateUI() {
+        renderLegend();
+        highlightRows();
+    }
+
+    // Executa no carregamento inicial
+    updateUI();
 
     // Observador para atualizações dinâmicas, ordenação e paginação
     const observer = new MutationObserver(() => {
-        highlightRows();
+        updateUI();
     });
 
     observer.observe(document.body, {
