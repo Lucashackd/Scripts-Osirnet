@@ -53,7 +53,6 @@
         `;
 
         legendContainer.innerHTML = `
-            <strong style="margin-right: 2px; color: #555;">Legenda:</strong>
             <span style="display: inline-flex; align-items: center; gap: 5px;">
                 <span style="width: 12px; height: 12px; background-color: ${COLORS.PINK}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Troca de Endereço
             </span>
