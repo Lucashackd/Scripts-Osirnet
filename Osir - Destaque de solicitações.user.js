@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Destaque de solicitações
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      2.0
+// @version      2.1
 // @description  Destaca as linhas da tabela por tipo de serviço e exibe legenda detalhada alinhada no ERP.
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/get_authentication_informations/*
@@ -24,6 +24,7 @@
         GREEN: '#a5d6a7',           // Ativação (Verde claro)
         GREEN_LIGHT: '#e8f5e9',     // Habilitação Fibra (Verde muito claro)
         BLUE: 'lightblue',          // Downgrade / Upgrade
+        PURPLE: '#e1bee7',          // Retorno (Roxo claro)
         SELECTED: '#141414'         // Linha mãe selecionada (Preto suave)
     };
 
@@ -93,7 +94,7 @@
     function renderLegend() {
         const wrapper = document.getElementById('solicitations-table_wrapper');
         const filter = document.getElementById('solicitations-table_filter');
-        
+
         if (!wrapper || document.getElementById('solicitations-table-legend')) return;
 
         const legendContainer = document.createElement('div');
@@ -103,6 +104,7 @@
             display: inline-flex;
             align-items: center;
             gap: 12px;
+            margin-top: 4px;
             margin-bottom: 8px;
             padding: 4px 10px;
             background-color: #f8f9fa;
@@ -115,7 +117,6 @@
         `;
 
         legendContainer.innerHTML = `
-            <strong style="margin-right: 2px; color: #555;">Legenda:</strong>
             <span style="display: inline-flex; align-items: center; gap: 5px;">
                 <span style="width: 12px; height: 12px; background-color: ${COLORS.PINK}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Troca de Endereço
             </span>
@@ -133,6 +134,9 @@
             </span>
             <span style="display: inline-flex; align-items: center; gap: 5px;">
                 <span style="width: 12px; height: 12px; background-color: ${COLORS.BLUE}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Downgrade / Upgrade
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width: 12px; height: 12px; background-color: ${COLORS.PURPLE}; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></span> Retorno
             </span>
         `;
 
@@ -182,6 +186,10 @@
                 // 6. Downgrade OU Upgrade (Azul claro)
                 else if (titleText.includes('downgrade') || titleText.includes('upgrade')) {
                     highlightColor = COLORS.BLUE;
+                }
+                // 7. Retorno (Roxo claro)
+                else if (titleText.includes('retorno')) {
+                    highlightColor = COLORS.PURPLE;
                 }
 
                 if (highlightColor) {
