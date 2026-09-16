@@ -8,6 +8,7 @@
 // @match        *://*.osirnet.com.br/*
 // @exclude      https://chat.osirnet.com.br/*
 // @exclude      https://erp.osirnet.com.br/ui/*/legacy/operations/*
+// @exclude      https://ygo.osirnet.com.br/*
 // @grant        none
 // @run-at       document-end
 // @license      MIT
