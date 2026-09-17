@@ -1,0 +1,2947 @@
+// ==UserScript==
+// @name         Osir - ERP Caixa sem Registro / Inconsistência
+// @namespace    https://erp.osirnet.com.br/
+// @version      1.0.2
+// @description  Adiciona uma ação para tratamento de caixas sem registro ou inconsistências.
+// @author       Lucashackd
+// @match        https://erp.osirnet.com.br/*
+// @match        *://*.osirnet.com.br/*
+// @grant        none
+// @license      MIT
+// @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const CONFIG = {
+        splitterInputId: 'splitterId',
+        buttonId: 'tm-caixa-inconsistencia-button',
+        modalId: 'tm-caixa-inconsistencia-modal',
+        styleId: 'tm-caixa-inconsistencia-style',
+        selectId: 'tm-caixa-inconsistencia-type',
+        copyButtonId: 'tm-copiar-mascara-button',
+
+        apiBaseUrl:
+            'https://erp.osirnet.com.br:45701',
+    };
+
+    let mutationScheduled = false;
+
+    /*
+     * =========================================================
+     * UTILITÁRIOS
+     * =========================================================
+     */
+
+    function normalizeText(value) {
+        return String(value ?? '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function normalizeLabel(value) {
+        return normalizeText(value)
+            .toUpperCase();
+    }
+
+    function normalizeNumericId(value) {
+        const text =
+            normalizeText(value);
+
+        return /^\d+$/.test(text)
+            ? text
+            : '';
+    }
+
+    function escapeHtmlAttribute(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('"', '&quot;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;');
+    }
+
+    function firstText(...values) {
+        return (
+            values
+                .map(normalizeText)
+                .find(Boolean) ||
+            ''
+        );
+    }
+
+    function getErpInputValue(id) {
+        return (
+            document
+                .getElementById(id)
+                ?.value
+                ?.trim() ||
+            ''
+        );
+    }
+
+    /*
+     * Remove:
+     *
+     * Slot XX Porta XX
+     *
+     * Exemplo:
+     *
+     * Fibra BGE Slot 03 Porta 11
+     * ->
+     * Fibra BGE
+     */
+    function normalizeOltValue(value) {
+        return normalizeText(
+            value
+        )
+            .replace(
+                /\s+Slot\s+\d+\s+Porta\s+\d+\s*$/i,
+                ''
+            )
+            .trim();
+    }
+
+    /*
+     * =========================================================
+     * ESTILOS
+     * =========================================================
+     */
+
+    function injectStyles() {
+        if (
+            document.getElementById(
+                CONFIG.styleId
+            )
+        ) {
+            return;
+        }
+
+        const style =
+            document.createElement(
+                'style'
+            );
+
+        style.id =
+            CONFIG.styleId;
+
+        style.textContent = `
+            #${CONFIG.buttonId} {
+                width: 32px;
+                height: 32px;
+
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+
+                margin-left: 8px;
+
+                border: 0;
+                border-radius: 2px;
+
+                background: #f57c00;
+                color: #000;
+
+                cursor: pointer;
+
+                transition:
+                    background-color .15s ease,
+                    color .15s ease,
+                    transform .15s ease;
+            }
+
+            #${CONFIG.buttonId}:hover {
+                background-color:
+                    rgba(245, 157, 69, .9);
+
+                color: #2a2a2a;
+            }
+
+            #${CONFIG.buttonId}:active {
+                transform: scale(.94);
+            }
+
+            #${CONFIG.buttonId}:focus-visible {
+                outline:
+                    2px solid #f57c00;
+
+                outline-offset: 2px;
+            }
+
+            #${CONFIG.buttonId} svg {
+                width: 22px;
+                height: 22px;
+
+                fill: currentColor;
+
+                pointer-events: none;
+            }
+
+            .tm-splitter-action-wrapper {
+                display: flex;
+                align-items: center;
+
+                width: 100%;
+            }
+
+            .tm-splitter-action-wrapper
+            > .tm-splitter-original {
+                flex: 1;
+                min-width: 0;
+            }
+
+            #${CONFIG.modalId} {
+                position: fixed;
+                inset: 0;
+
+                display: flex;
+                align-items: center;
+                justify-content: center;
+
+                padding: 24px;
+
+                background:
+                    rgba(0, 0, 0, .45);
+
+                z-index: 999999;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-container {
+                width:
+                    min(650px, 100%);
+
+                max-height: 90vh;
+
+                display: flex;
+                flex-direction: column;
+
+                background: #fff;
+
+                border-radius: 6px;
+
+                box-shadow:
+                    0 11px 15px -7px
+                        rgba(0, 0, 0, .20),
+                    0 24px 38px 3px
+                        rgba(0, 0, 0, .14),
+                    0 9px 46px 8px
+                        rgba(0, 0, 0, .12);
+
+                overflow: hidden;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+
+                padding: 16px 20px;
+
+                border-bottom:
+                    1px solid
+                    rgba(0, 0, 0, .12);
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-title-wrapper {
+                display: flex;
+                align-items: center;
+
+                gap: 10px;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-title-icon {
+                width: 24px;
+                height: 24px;
+
+                fill: #f57c00;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-title {
+                margin: 0;
+
+                color:
+                    rgba(0, 0, 0, .87);
+
+                font-family:
+                    Roboto,
+                    Arial,
+                    sans-serif;
+
+                font-size: 18px;
+                font-weight: 500;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-close {
+                width: 32px;
+                height: 32px;
+
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+
+                padding: 0;
+
+                border: 0;
+                border-radius: 50%;
+
+                background: transparent;
+
+                color:
+                    rgba(0, 0, 0, .54);
+
+                cursor: pointer;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-close:hover {
+                background:
+                    rgba(0, 0, 0, .06);
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-close svg {
+                width: 22px;
+                height: 22px;
+
+                fill: currentColor;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-content {
+                padding: 20px;
+
+                overflow-y: auto;
+
+                font-family:
+                    Roboto,
+                    Arial,
+                    sans-serif;
+
+                font-size: 14px;
+            }
+
+            #${CONFIG.modalId}
+            .tm-form-group {
+                display: flex;
+                flex-direction: column;
+
+                gap: 7px;
+            }
+
+            #${CONFIG.modalId}
+            .tm-form-label {
+                color:
+                    rgba(0, 0, 0, .68);
+
+                font-size: 13px;
+                font-weight: 500;
+            }
+
+            #${CONFIG.modalId}
+            .tm-form-select {
+                width: 100%;
+                height: 40px;
+
+                border:
+                    1px solid
+                    rgba(0, 0, 0, .23);
+
+                border-radius: 4px;
+
+                background: #fff;
+
+                font-size: 14px;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-editor {
+                margin-top: 20px;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-row {
+                display: grid;
+
+                grid-template-columns:
+                    190px 1fr;
+
+                align-items: center;
+
+                gap: 10px;
+
+                margin-bottom: 9px;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-row-label {
+                color:
+                    rgba(0, 0, 0, .68);
+
+                font-size: 13px;
+                font-weight: 500;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-input {
+                width: 100%;
+                min-width: 0;
+                height: 34px;
+
+                box-sizing:
+                    border-box;
+
+                padding: 6px 9px;
+
+                border:
+                    1px solid
+                    rgba(0, 0, 0, .23);
+
+                border-radius: 4px;
+
+                background: #fff;
+
+                font-size: 13px;
+
+                outline: none;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-input:focus {
+                border-color:
+                    #1976d2;
+
+                box-shadow:
+                    0 0 0 1px
+                    #1976d2;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-divider {
+                display: flex;
+                align-items: center;
+
+                gap: 12px;
+
+                margin:
+                    20px 0 14px;
+
+                color:
+                    rgba(0, 0, 0, .6);
+
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            #${CONFIG.modalId}
+            .tm-mask-divider::before,
+            #${CONFIG.modalId}
+            .tm-mask-divider::after {
+                content: "";
+
+                flex: 1;
+
+                height: 1px;
+
+                background:
+                    rgba(0, 0, 0, .12);
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-actions {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+
+                gap: 8px;
+
+                padding:
+                    12px 20px 18px;
+
+                border-top:
+                    1px solid
+                    rgba(0, 0, 0, .08);
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-secondary-button,
+            #${CONFIG.modalId}
+            .tm-modal-primary-button {
+                min-height: 36px;
+
+                padding:
+                    0 16px;
+
+                border: 0;
+                border-radius: 4px;
+
+                font-size: 14px;
+                font-weight: 500;
+
+                cursor: pointer;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-secondary-button {
+                background:
+                    transparent;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-primary-button {
+                background:
+                    #f57c00;
+
+                color: #000;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-primary-button.tm-success {
+                background:
+                    #2e7d32;
+
+                color: #fff;
+            }
+
+            #${CONFIG.modalId}
+            .tm-modal-primary-button.tm-error {
+                background:
+                    #d32f2f;
+
+                color: #fff;
+            }
+
+            @media (max-width: 600px) {
+                #${CONFIG.modalId}
+                .tm-mask-row {
+                    grid-template-columns:
+                        1fr;
+                }
+            }
+        `;
+
+        document.head.appendChild(
+            style
+        );
+    }
+
+    /*
+     * =========================================================
+     * ÍCONES
+     * =========================================================
+     */
+
+    function getWarningIcon() {
+        return `
+            <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+            >
+                <path
+                    d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-2h-2v-4h2v4z"
+                />
+            </svg>
+        `;
+    }
+
+    function getCloseIcon() {
+        return `
+            <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+            >
+                <path
+                    d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.41 4.29 19.71 2.88 18.3 9.17 12 2.88 5.7 4.29 4.29 10.59 10.59 16.89 4.29z"
+                />
+            </svg>
+        `;
+    }
+
+    /*
+     * =========================================================
+     * LEITURA DO PAINEL
+     * =========================================================
+     */
+
+    function getPanelFieldValue(
+        labelText
+    ) {
+        const expected =
+            normalizeLabel(
+                labelText
+            );
+
+        for (
+            const paragraph
+            of document.querySelectorAll(
+                'p'
+            )
+        ) {
+            if (
+                normalizeLabel(
+                    paragraph.textContent
+                ) !== expected
+            ) {
+                continue;
+            }
+
+            const parent =
+                paragraph.parentElement;
+
+            if (!parent) {
+                continue;
+            }
+
+            const paragraphs =
+                Array.from(
+                    parent.children
+                ).filter(
+                    (element) =>
+                        element.tagName ===
+                        'P'
+                );
+
+            const index =
+                paragraphs.indexOf(
+                    paragraph
+                );
+
+            for (
+                let i =
+                    index + 1;
+                i <
+                    paragraphs.length;
+                i++
+            ) {
+                const value =
+                    normalizeText(
+                        paragraphs[
+                            i
+                        ].textContent
+                    );
+
+                if (value) {
+                    return value;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /*
+     * Lê grids Material UI no padrão:
+     *
+     * <div container>
+     *     <div item>
+     *         <p>ETIQUETA</p>
+     *     </div>
+     *
+     *     <div item>
+     *         <p>VALOR COMPLETO</p>
+     *     </div>
+     * </div>
+     */
+    function getGridFieldValue(
+        labelText
+    ) {
+        const expected =
+            normalizeLabel(
+                labelText
+            );
+
+        for (
+            const paragraph
+            of document.querySelectorAll(
+                'p'
+            )
+        ) {
+            if (
+                normalizeLabel(
+                    paragraph.textContent
+                ) !== expected
+            ) {
+                continue;
+            }
+
+            const labelColumn =
+                paragraph.closest(
+                    '.MuiGrid-item'
+                ) ||
+                paragraph.parentElement;
+
+            if (!labelColumn) {
+                continue;
+            }
+
+            const row =
+                labelColumn.parentElement;
+
+            if (!row) {
+                continue;
+            }
+
+            const columns =
+                Array.from(
+                    row.children
+                );
+
+            const labelIndex =
+                columns.indexOf(
+                    labelColumn
+                );
+
+            if (
+                labelIndex < 0
+            ) {
+                continue;
+            }
+
+            /*
+             * Procura nas colunas
+             * posteriores ao rótulo.
+             */
+            for (
+                let i =
+                    labelIndex + 1;
+                i <
+                    columns.length;
+                i++
+            ) {
+                const valueParagraphs =
+                    Array.from(
+                        columns[
+                            i
+                        ].querySelectorAll(
+                            'p'
+                        )
+                    );
+
+                for (
+                    const valueParagraph
+                    of valueParagraphs
+                ) {
+                    const value =
+                        normalizeText(
+                            valueParagraph
+                                .textContent
+                        );
+
+                    if (
+                        value &&
+                        normalizeLabel(
+                            value
+                        ) !== expected
+                    ) {
+                        return value;
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /*
+     * =========================================================
+     * ETIQUETA COMPLETA
+     * =========================================================
+     */
+
+    /*
+     * Fonte principal para a etiqueta
+     * da Solicitação Original.
+     *
+     * Exemplo:
+     *
+     * ETIQUETA
+     *
+     * D7JT0SJ6 - Plano Multi 600 x 250 Down/up
+     * Rua Trezentos e Quarenta, 896 - Menino Deus / Bagé
+     *
+     * É retornado como uma única string completa.
+     */
+    function getFullTagFromGrid() {
+        return normalizeText(
+            getGridFieldValue(
+                'ETIQUETA'
+            )
+        );
+    }
+
+    /*
+     * =========================================================
+     * CABEÇALHO
+     * =========================================================
+     */
+
+    function getHeaderFieldValue(
+        labelText
+    ) {
+        const expected =
+            normalizeLabel(
+                labelText
+            );
+
+        for (
+            const span
+            of document.querySelectorAll(
+                'span'
+            )
+        ) {
+            if (
+                normalizeLabel(
+                    span.textContent
+                ) !== expected
+            ) {
+                continue;
+            }
+
+            const container =
+                span.parentElement;
+
+            if (!container) {
+                continue;
+            }
+
+            const children =
+                Array.from(
+                    container.children
+                );
+
+            const index =
+                children.indexOf(
+                    span
+                );
+
+            for (
+                let i =
+                    index + 1;
+                i <
+                    children.length;
+                i++
+            ) {
+                const value =
+                    normalizeText(
+                        children[
+                            i
+                        ].textContent
+                    );
+
+                if (
+                    value &&
+                    normalizeLabel(
+                        value
+                    ) !== expected
+                ) {
+                    return value;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    function findHeaderFieldLink(
+        labelText
+    ) {
+        const expected =
+            normalizeLabel(
+                labelText
+            );
+
+        for (
+            const span
+            of document.querySelectorAll(
+                'span'
+            )
+        ) {
+            if (
+                normalizeLabel(
+                    span.textContent
+                ) !== expected
+            ) {
+                continue;
+            }
+
+            const link =
+                span
+                    .parentElement
+                    ?.querySelector(
+                        'a'
+                    );
+
+            if (link) {
+                return link;
+            }
+        }
+
+        return null;
+    }
+
+    function getVisibleClient() {
+        return firstText(
+            getHeaderFieldValue(
+                'Cliente'
+            ),
+
+            getGridFieldValue(
+                'CLIENTE'
+            )
+        );
+    }
+
+    function getVisibleTagCode() {
+        return firstText(
+            getHeaderFieldValue(
+                'Etiqueta'
+            )
+        );
+    }
+
+    function getVisibleService() {
+        return getHeaderFieldValue(
+            'Serviço'
+        );
+    }
+
+    function getVisibleAttendant() {
+        return firstText(
+            getGridFieldValue(
+                'ATENDENTE'
+            ),
+
+            getPanelFieldValue(
+                'ATENDENTE'
+            )
+        );
+    }
+
+    function getSlotOltValue() {
+        return firstText(
+            getPanelFieldValue(
+                'Slot OLT'
+            ),
+
+            getPanelFieldValue(
+                'SlotOLT'
+            ),
+
+            getErpInputValue(
+                'slotOlt'
+            )
+        );
+    }
+
+    function getPortOltValue() {
+        return firstText(
+            getPanelFieldValue(
+                'Porta OLT'
+            ),
+
+            getPanelFieldValue(
+                'PortaOLT'
+            ),
+
+            getErpInputValue(
+                'portOlt'
+            )
+        );
+    }
+
+    /*
+     * =========================================================
+     * PROTOCOLO / REACT
+     * =========================================================
+     */
+
+    function findProtocolLink() {
+        return (
+            findHeaderFieldLink(
+                'Protocolo'
+            ) ||
+            null
+        );
+    }
+
+    function getOsProtocolValue() {
+        return normalizeNumericId(
+            findProtocolLink()
+                ?.textContent
+        );
+    }
+
+    function getReactFiber() {
+        const link =
+            findProtocolLink();
+
+        if (!link) {
+            return null;
+        }
+
+        const key =
+            Object.keys(
+                link
+            ).find(
+                (item) =>
+                    item.startsWith(
+                        '__reactFiber$'
+                    )
+            );
+
+        return key
+            ? link[key]
+            : null;
+    }
+
+    function getReactContext() {
+        let fiber =
+            getReactFiber();
+
+        const contexts = [];
+
+        let level = 0;
+
+        while (
+            fiber &&
+            level < 80
+        ) {
+            if (
+                fiber.memoizedProps &&
+                typeof fiber
+                    .memoizedProps ===
+                    'object'
+            ) {
+                contexts.push(
+                    fiber.memoizedProps
+                );
+            }
+
+            if (
+                fiber.pendingProps &&
+                typeof fiber
+                    .pendingProps ===
+                    'object'
+            ) {
+                contexts.push(
+                    fiber.pendingProps
+                );
+            }
+
+            fiber =
+                fiber.return;
+
+            level++;
+        }
+
+        return contexts;
+    }
+
+    function getAssignmentIdFromReact() {
+        for (
+            const props
+            of getReactContext()
+        ) {
+            const candidates = [
+                props
+                    ?.solicitationInformationStore
+                    ?.formControls
+                    ?.id
+                    ?.value,
+
+                props
+                    ?.tabsStore
+                    ?.currentTab
+                    ?.data
+                    ?.assignmentId,
+
+                props
+                    ?.tabsStore
+                    ?.currentTab
+                    ?.data
+                    ?.assignment
+                    ?.id,
+            ];
+
+            for (
+                const candidate
+                of candidates
+            ) {
+                const id =
+                    normalizeNumericId(
+                        candidate
+                    );
+
+                if (id) {
+                    return id;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    function getCurrentTabData() {
+        for (
+            const props
+            of getReactContext()
+        ) {
+            const data =
+                props
+                    ?.tabsStore
+                    ?.currentTab
+                    ?.data;
+
+            if (
+                data &&
+                typeof data ===
+                    'object'
+            ) {
+                return data;
+            }
+        }
+
+        return null;
+    }
+
+    /*
+     * =========================================================
+     * REACT - DADOS
+     * =========================================================
+     */
+
+    function getReactClient() {
+        const data =
+            getCurrentTabData();
+
+        if (!data) {
+            return '';
+        }
+
+        return firstText(
+            data
+                ?.client
+                ?.name,
+
+            data
+                ?.customer
+                ?.name,
+
+            data
+                ?.assignment
+                ?.client
+                ?.name,
+
+            data
+                ?.clientName
+        );
+    }
+
+    function getReactTagCode() {
+        const data =
+            getCurrentTabData();
+
+        if (!data) {
+            return '';
+        }
+
+        return firstText(
+            data
+                ?.contractServiceTag
+                ?.serviceTag,
+
+            data
+                ?.serviceTag,
+
+            data
+                ?.assignment
+                ?.contractServiceTag
+                ?.serviceTag
+        );
+    }
+
+    function getReactServiceTitle() {
+        const data =
+            getCurrentTabData();
+
+        if (!data) {
+            return '';
+        }
+
+        return firstText(
+            data
+                ?.contractServiceTag
+                ?.title,
+
+            data
+                ?.assignment
+                ?.contractServiceTag
+                ?.title
+        );
+    }
+
+    function getReactResponsible() {
+        const data =
+            getCurrentTabData();
+
+        if (!data) {
+            return '';
+        }
+
+        return firstText(
+            data
+                ?.attendant
+                ?.name,
+
+            data
+                ?.responsible
+                ?.name,
+
+            data
+                ?.assignment
+                ?.attendant
+                ?.name,
+
+            data
+                ?.assignment
+                ?.responsible
+                ?.name,
+
+            data
+                ?.attendantName,
+
+            data
+                ?.responsibleName
+        );
+    }
+
+    /*
+     * =========================================================
+     * AUTENTICAÇÃO / API
+     * =========================================================
+     */
+
+    function getErpAccessToken() {
+        try {
+            const raw =
+                localStorage.getItem(
+                    'auth'
+                );
+
+            if (!raw) {
+                return '';
+            }
+
+            return (
+                JSON.parse(
+                    raw
+                )
+                    ?.accessToken ||
+                ''
+            );
+        } catch {
+            return '';
+        }
+    }
+
+    async function apiGet(path) {
+        const token =
+            getErpAccessToken();
+
+        if (!token) {
+            throw new Error(
+                'Token não encontrado.'
+            );
+        }
+
+        const response =
+            await fetch(
+                CONFIG.apiBaseUrl +
+                    path,
+                {
+                    method:
+                        'GET',
+
+                    credentials:
+                        'include',
+
+                    headers: {
+                        Accept:
+                            'application/json',
+
+                        Authorization:
+                            `Bearer ${token}`,
+                    },
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status}`
+            );
+        }
+
+        return response.json();
+    }
+
+    async function getSolicitationInformation() {
+        const assignmentId =
+            getAssignmentIdFromReact();
+
+        if (!assignmentId) {
+            return null;
+        }
+
+        const json =
+            await apiGet(
+                `/api/v1/ServiceDesk/AssignmentIncidents/GetSolicitationInformations?assignmentId=${
+                    encodeURIComponent(
+                        assignmentId
+                    )
+                }`
+            );
+
+        return (
+            json?.response ??
+            json ??
+            null
+        );
+    }
+
+    async function getAssignmentReports() {
+        const assignmentId =
+            getAssignmentIdFromReact();
+
+        if (!assignmentId) {
+            return null;
+        }
+
+        const json =
+            await apiGet(
+                `/api/v1/Projects/Attendance/GetAssignmetReports?assignmentId=${
+                    encodeURIComponent(
+                        assignmentId
+                    )
+                }`
+            );
+
+        return (
+            json?.response ??
+            json ??
+            null
+        );
+    }
+
+    /*
+     * =========================================================
+     * EXTRAÇÃO DA API
+     * =========================================================
+     */
+
+    function getClientFromInformation(
+        information
+    ) {
+        return firstText(
+            information
+                ?.client
+                ?.name,
+
+            information
+                ?.customer
+                ?.name,
+
+            information
+                ?.assignment
+                ?.client
+                ?.name,
+
+            information
+                ?.clientName
+        );
+    }
+
+    function getTagCodeFromInformation(
+        information
+    ) {
+        return firstText(
+            information
+                ?.contractServiceTag
+                ?.serviceTag,
+
+            information
+                ?.assignment
+                ?.contractServiceTag
+                ?.serviceTag
+        );
+    }
+
+    function getServiceTitleFromInformation(
+        information
+    ) {
+        return firstText(
+            information
+                ?.contractServiceTag
+                ?.title,
+
+            information
+                ?.assignment
+                ?.contractServiceTag
+                ?.title
+        );
+    }
+
+    /*
+     * =========================================================
+     * ENDEREÇO
+     * =========================================================
+     */
+
+    function getDirectAddressFromInformation(
+        information
+    ) {
+        return firstText(
+            information
+                ?.address,
+
+            information
+                ?.address
+                ?.description,
+
+            information
+                ?.address
+                ?.fullAddress,
+
+            information
+                ?.client
+                ?.address,
+
+            information
+                ?.client
+                ?.address
+                ?.description,
+
+            information
+                ?.client
+                ?.address
+                ?.fullAddress,
+
+            information
+                ?.customer
+                ?.address,
+
+            information
+                ?.customer
+                ?.address
+                ?.description,
+
+            information
+                ?.customer
+                ?.address
+                ?.fullAddress,
+
+            information
+                ?.contractServiceTag
+                ?.address,
+
+            information
+                ?.contractServiceTag
+                ?.address
+                ?.description,
+
+            information
+                ?.contractServiceTag
+                ?.fullAddress
+        );
+    }
+
+    function extractAddressFromServiceTitle(
+        fullTitle,
+        service
+    ) {
+        const title =
+            normalizeText(
+                fullTitle
+            );
+
+        const serviceText =
+            normalizeText(
+                service
+            );
+
+        if (!title) {
+            return '';
+        }
+
+        if (
+            serviceText &&
+            title
+                .toLowerCase()
+                .startsWith(
+                    serviceText
+                        .toLowerCase()
+                )
+        ) {
+            return normalizeText(
+                title.slice(
+                    serviceText.length
+                )
+            );
+        }
+
+        const addressStart =
+            title.search(
+                /\b(Rua|Avenida|Av\.?|Travessa|Tv\.?|Estrada|Rodovia|R\.|Praça|Alameda|Beco)\b/i
+            );
+
+        if (
+            addressStart >= 0
+        ) {
+            return normalizeText(
+                title.slice(
+                    addressStart
+                )
+            );
+        }
+
+        return '';
+    }
+
+    function getAddressFromInformation(
+        information
+    ) {
+        const direct =
+            getDirectAddressFromInformation(
+                information
+            );
+
+        if (
+            direct &&
+            typeof direct ===
+                'string'
+        ) {
+            return direct;
+        }
+
+        const title =
+            getServiceTitleFromInformation(
+                information
+            );
+
+        return firstText(
+            extractAddressFromServiceTitle(
+                title,
+                getVisibleService()
+            ),
+
+            extractAddressFromServiceTitle(
+                title,
+                information
+                    ?.service
+                    ?.title
+            ),
+
+            extractAddressFromServiceTitle(
+                title,
+                information
+                    ?.service
+                    ?.name
+            )
+        );
+    }
+
+    function getAddressFromReact() {
+        return extractAddressFromServiceTitle(
+            getReactServiceTitle(),
+            getVisibleService()
+        );
+    }
+
+    /*
+     * =========================================================
+     * RESPONSÁVEL
+     * =========================================================
+     */
+
+    function getResponsibleFromReports(
+        reports
+    ) {
+        if (!reports) {
+            return '';
+        }
+
+        const items =
+            Array.isArray(
+                reports
+            )
+                ? reports
+                : [
+                    reports,
+                ];
+
+        const candidates = [];
+
+        for (
+            const item
+            of items
+        ) {
+            candidates.push(
+                item
+                    ?.attendant
+                    ?.name,
+
+                item
+                    ?.responsible
+                    ?.name,
+
+                item
+                    ?.responsibleName,
+
+                item
+                    ?.attendantName,
+
+                item
+                    ?.user
+                    ?.name
+            );
+
+            if (
+                typeof item
+                    ?.responsible ===
+                    'string'
+            ) {
+                candidates.push(
+                    item.responsible
+                );
+            }
+
+            if (
+                typeof item
+                    ?.attendant ===
+                    'string'
+            ) {
+                candidates.push(
+                    item.attendant
+                );
+            }
+        }
+
+        return firstText(
+            ...candidates
+        );
+    }
+
+    /*
+     * =========================================================
+     * ETIQUETA COMPLETA - FALLBACK API
+     * =========================================================
+     */
+
+    function buildFullTagFromInformation(
+        information
+    ) {
+        const tagCode =
+            getTagCodeFromInformation(
+                information
+            );
+
+        const title =
+            getServiceTitleFromInformation(
+                information
+            );
+
+        if (
+            tagCode &&
+            title
+        ) {
+            return normalizeText(
+                `${tagCode} - ${title}`
+            );
+        }
+
+        return firstText(
+            title,
+            tagCode
+        );
+    }
+
+    function buildFullTagFromReact() {
+        const tagCode =
+            getReactTagCode();
+
+        const title =
+            getReactServiceTitle();
+
+        if (
+            tagCode &&
+            title
+        ) {
+            return normalizeText(
+                `${tagCode} - ${title}`
+            );
+        }
+
+        return firstText(
+            title,
+            tagCode
+        );
+    }
+
+    /*
+     * =========================================================
+     * MODAL GET / SET
+     * =========================================================
+     */
+
+    function setModalInputValue(
+        modal,
+        id,
+        value
+    ) {
+        const input =
+            modal.querySelector(
+                `#${id}`
+            );
+
+        const text =
+            normalizeText(
+                value
+            );
+
+        if (
+            input &&
+            text
+        ) {
+            input.value =
+                text;
+        }
+    }
+
+    function setModalInputValueIfEmpty(
+        modal,
+        id,
+        value
+    ) {
+        const input =
+            modal.querySelector(
+                `#${id}`
+            );
+
+        const text =
+            normalizeText(
+                value
+            );
+
+        if (
+            !input ||
+            !text ||
+            input.value.trim()
+        ) {
+            return;
+        }
+
+        input.value =
+            text;
+    }
+
+    function getModalInputValue(
+        modal,
+        id
+    ) {
+        return (
+            modal
+                .querySelector(
+                    `#${id}`
+                )
+                ?.value
+                ?.trim() ||
+            ''
+        );
+    }
+
+    /*
+     * =========================================================
+     * SOLICITAÇÃO ORIGINAL
+     * =========================================================
+     */
+
+    /*
+     * Inicializa apenas uma vez.
+     *
+     * Depois os campos permanecem
+     * completamente independentes.
+     */
+    function initializeOriginalFields(
+        modal
+    ) {
+        setModalInputValueIfEmpty(
+            modal,
+            'tm-mask-original-protocol',
+            getModalInputValue(
+                modal,
+                'tm-mask-os-protocol'
+            )
+        );
+
+        setModalInputValueIfEmpty(
+            modal,
+            'tm-mask-original-client',
+            getModalInputValue(
+                modal,
+                'tm-mask-installed-client'
+            )
+        );
+    }
+
+    /*
+     * =========================================================
+     * CARGA COMPLETA DOS DADOS
+     * =========================================================
+     */
+
+    async function loadCustomerData(
+        modal
+    ) {
+        let client =
+            firstText(
+                getVisibleClient(),
+                getReactClient()
+            );
+
+        let responsible =
+            firstText(
+                getVisibleAttendant(),
+                getReactResponsible()
+            );
+
+        /*
+         * NOVO:
+         *
+         * A etiqueta COMPLETA do grid
+         * é a fonte prioritária.
+         */
+        let fullTag =
+            firstText(
+                getFullTagFromGrid(),
+                buildFullTagFromReact()
+            );
+
+        let address =
+            getAddressFromReact();
+
+        /*
+         * Dados já disponíveis
+         * antes da API.
+         */
+        if (client) {
+            setModalInputValue(
+                modal,
+                'tm-mask-installed-client',
+                client
+            );
+
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-original-client',
+                client
+            );
+        }
+
+        if (responsible) {
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-responsible',
+                responsible
+            );
+        }
+
+        if (fullTag) {
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-tag',
+                fullTag
+            );
+        }
+
+        if (address) {
+            setModalInputValue(
+                modal,
+                'tm-mask-box-address',
+                address
+            );
+        }
+
+        /*
+         * Consulta APIs.
+         */
+        const [
+            information,
+            reports,
+        ] =
+            await Promise.all([
+                getSolicitationInformation()
+                    .catch(
+                        () => null
+                    ),
+
+                getAssignmentReports()
+                    .catch(
+                        () => null
+                    ),
+            ]);
+
+        /*
+         * Cliente.
+         */
+        client =
+            firstText(
+                getClientFromInformation(
+                    information
+                ),
+
+                client
+            );
+
+        /*
+         * Responsável.
+         */
+        responsible =
+            firstText(
+                getVisibleAttendant(),
+
+                getResponsibleFromReports(
+                    reports
+                ),
+
+                responsible
+            );
+
+        /*
+         * Etiqueta completa.
+         *
+         * Ordem:
+         *
+         * 1. Grid ETIQUETA completo
+         * 2. API
+         * 3. React
+         * 4. valor já encontrado
+         */
+        fullTag =
+            firstText(
+                getFullTagFromGrid(),
+
+                buildFullTagFromInformation(
+                    information
+                ),
+
+                buildFullTagFromReact(),
+
+                fullTag
+            );
+
+        /*
+         * Endereço.
+         */
+        address =
+            firstText(
+                getAddressFromInformation(
+                    information
+                ),
+
+                address
+            );
+
+        /*
+         * Protocolo.
+         */
+        const protocol =
+            normalizeNumericId(
+                information
+                    ?.id
+            );
+
+        if (protocol) {
+            setModalInputValue(
+                modal,
+                'tm-mask-os-protocol',
+                protocol
+            );
+
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-original-protocol',
+                protocol
+            );
+        }
+
+        if (client) {
+            setModalInputValue(
+                modal,
+                'tm-mask-installed-client',
+                client
+            );
+
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-original-client',
+                client
+            );
+        }
+
+        if (responsible) {
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-responsible',
+                responsible
+            );
+        }
+
+        if (fullTag) {
+            setModalInputValueIfEmpty(
+                modal,
+                'tm-mask-tag',
+                fullTag
+            );
+        }
+
+        if (address) {
+            setModalInputValue(
+                modal,
+                'tm-mask-box-address',
+                address
+            );
+        }
+    }
+
+    /*
+     * =========================================================
+     * DADOS INICIAIS
+     * =========================================================
+     */
+
+    function getMaskInitialData() {
+        const osProtocol =
+            getOsProtocolValue();
+
+        const installedClient =
+            firstText(
+                getVisibleClient(),
+                getReactClient()
+            );
+
+        const responsible =
+            firstText(
+                getVisibleAttendant(),
+                getReactResponsible()
+            );
+
+        /*
+         * NOVO:
+         *
+         * usa a etiqueta completa
+         * diretamente do grid.
+         */
+        const fullTag =
+            firstText(
+                getFullTagFromGrid(),
+                buildFullTagFromReact()
+            );
+
+        return {
+            osProtocol,
+
+            installedClient,
+
+            pppoe:
+                getErpInputValue(
+                    'user'
+                ),
+
+            box:
+                getErpInputValue(
+                    'splitterId'
+                ),
+
+            clientPort:
+                getErpInputValue(
+                    'splitterPortId'
+                ),
+
+            boxAddress:
+                getAddressFromReact(),
+
+            olt:
+                normalizeOltValue(
+                    getErpInputValue(
+                        'authenticationAccessPointId'
+                    )
+                ),
+
+            slotOlt:
+                getSlotOltValue(),
+
+            portOlt:
+                getPortOltValue(),
+
+            originalProtocol:
+                osProtocol,
+
+            originalClient:
+                installedClient,
+
+            responsible,
+
+            /*
+             * Etiqueta completa.
+             */
+            tag:
+                fullTag,
+        };
+    }
+
+    /*
+     * =========================================================
+     * MODAL
+     * =========================================================
+     */
+
+    function createMaskRow(
+        id,
+        label,
+        value = '',
+        type = 'text'
+    ) {
+        const numeric =
+            type === 'number'
+                ? `
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                `
+                : '';
+
+        return `
+            <div class="tm-mask-row">
+
+                <label
+                    class="tm-mask-row-label"
+                    for="${id}"
+                >
+                    ${label}
+                </label>
+
+                <input
+                    id="${id}"
+                    class="tm-mask-input"
+                    type="${type}"
+                    value="${escapeHtmlAttribute(value)}"
+                    autocomplete="off"
+                    ${numeric}
+                >
+
+            </div>
+        `;
+    }
+
+    function configureIntegerInputs(
+        modal
+    ) {
+        const ids = [
+            'tm-mask-os-protocol',
+            'tm-mask-client-port',
+            'tm-mask-slot-olt',
+            'tm-mask-port-olt',
+            'tm-mask-original-protocol',
+        ];
+
+        for (
+            const id
+            of ids
+        ) {
+            const input =
+                modal.querySelector(
+                    `#${id}`
+                );
+
+            if (!input) {
+                continue;
+            }
+
+            input.addEventListener(
+                'keydown',
+                (event) => {
+                    if (
+                        [
+                            'e',
+                            'E',
+                            '+',
+                            '-',
+                            '.',
+                            ',',
+                        ].includes(
+                            event.key
+                        )
+                    ) {
+                        event.preventDefault();
+                    }
+                }
+            );
+
+            input.addEventListener(
+                'input',
+                () => {
+                    input.value =
+                        input.value.replace(
+                            /\D/g,
+                            ''
+                        );
+                }
+            );
+        }
+    }
+
+    function closeModal() {
+        document
+            .getElementById(
+                CONFIG.modalId
+            )
+            ?.remove();
+    }
+
+    /*
+     * =========================================================
+     * GERAÇÃO DA MÁSCARA
+     * =========================================================
+     */
+
+    function generateMaskFromEditor(
+        modal
+    ) {
+        const select =
+            modal.querySelector(
+                `#${CONFIG.selectId}`
+            );
+
+        const title =
+            select
+                ?.options?.[
+                    select.selectedIndex
+                ]
+                ?.textContent
+                ?.trim() ||
+            '';
+
+        return `${title}
+
+Protocolo da OS: ${getModalInputValue(
+            modal,
+            'tm-mask-os-protocol'
+        )}
+
+Nome do cliente instalado: ${getModalInputValue(
+            modal,
+            'tm-mask-installed-client'
+        )}
+PPPoE da conexão: ${getModalInputValue(
+            modal,
+            'tm-mask-pppoe'
+        )}
+Caixa: ${getModalInputValue(
+            modal,
+            'tm-mask-box'
+        )}
+Porta do cliente: ${getModalInputValue(
+            modal,
+            'tm-mask-client-port'
+        )}
+Endereço da caixa: ${getModalInputValue(
+            modal,
+            'tm-mask-box-address'
+        )}
+OLT: ${getModalInputValue(
+            modal,
+            'tm-mask-olt'
+        )}
+SlotOLT: ${getModalInputValue(
+            modal,
+            'tm-mask-slot-olt'
+        )}
+PortaOLT: ${getModalInputValue(
+            modal,
+            'tm-mask-port-olt'
+        )}
+
+--- Solicitação Original ---
+Protocolo ${getModalInputValue(
+            modal,
+            'tm-mask-original-protocol'
+        )}
+Cliente: ${getModalInputValue(
+            modal,
+            'tm-mask-original-client'
+        )}
+Responsável: ${getModalInputValue(
+            modal,
+            'tm-mask-responsible'
+        )}
+Etiqueta: ${getModalInputValue(
+            modal,
+            'tm-mask-tag'
+        )}`;
+    }
+
+    /*
+     * =========================================================
+     * CLIPBOARD
+     * =========================================================
+     */
+
+    async function copyToClipboard(
+        text
+    ) {
+        if (
+            navigator
+                .clipboard
+                ?.writeText
+        ) {
+            try {
+                await navigator
+                    .clipboard
+                    .writeText(
+                        text
+                    );
+
+                return;
+            } catch {
+                // fallback
+            }
+        }
+
+        const textarea =
+            document.createElement(
+                'textarea'
+            );
+
+        textarea.value =
+            text;
+
+        textarea.style.position =
+            'fixed';
+
+        textarea.style.left =
+            '-9999px';
+
+        textarea.style.top =
+            '-9999px';
+
+        document.body.appendChild(
+            textarea
+        );
+
+        textarea.select();
+
+        const success =
+            document.execCommand(
+                'copy'
+            );
+
+        textarea.remove();
+
+        if (!success) {
+            throw new Error(
+                'Falha ao copiar.'
+            );
+        }
+    }
+
+    function showCopyState(
+        button,
+        text,
+        className
+    ) {
+        button.classList.remove(
+            'tm-success',
+            'tm-error'
+        );
+
+        button.textContent =
+            text;
+
+        if (className) {
+            button.classList.add(
+                className
+            );
+        }
+
+        setTimeout(
+            () => {
+                button.classList.remove(
+                    'tm-success',
+                    'tm-error'
+                );
+
+                button.textContent =
+                    'Copiar Máscara';
+            },
+            1800
+        );
+    }
+
+    /*
+     * =========================================================
+     * ABERTURA DO MODAL
+     * =========================================================
+     */
+
+    function openModal() {
+        closeModal();
+
+        const data =
+            getMaskInitialData();
+
+        const modal =
+            document.createElement(
+                'div'
+            );
+
+        modal.id =
+            CONFIG.modalId;
+
+        modal.innerHTML = `
+            <div
+                class="tm-modal-container"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="tm-caixa-modal-title"
+            >
+
+                <header
+                    class="tm-modal-header"
+                >
+
+                    <div
+                        class="tm-modal-title-wrapper"
+                    >
+
+                        <svg
+                            class="tm-modal-title-icon"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-2h-2v-4h2v4z"
+                            />
+                        </svg>
+
+                        <h2
+                            id="tm-caixa-modal-title"
+                            class="tm-modal-title"
+                        >
+                            Caixa sem Registro / Inconsistência
+                        </h2>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        class="tm-modal-close"
+                        aria-label="Fechar"
+                        title="Fechar"
+                    >
+                        ${getCloseIcon()}
+                    </button>
+
+                </header>
+
+                <main
+                    class="tm-modal-content"
+                >
+
+                    <div
+                        class="tm-form-group"
+                    >
+
+                        <label
+                            class="tm-form-label"
+                            for="${CONFIG.selectId}"
+                        >
+                            Tipo de inconsistência
+                        </label>
+
+                        <select
+                            id="${CONFIG.selectId}"
+                            class="tm-form-select"
+                        >
+                            <option
+                                value="cto-nao-registrada"
+                            >
+                                CTO não registrada no ERP
+                            </option>
+
+                            <option
+                                value="ponto-acesso-incorreto"
+                            >
+                                CTO no Ponto de Acesso incorreto
+                            </option>
+
+                            <option
+                                value="cto-sem-identificacao"
+                            >
+                                CTO sem identificação
+                            </option>
+
+                            <option
+                                value="ponto-acesso-fixo"
+                            >
+                                CTO com ponto de acesso fixo no cadastro
+                            </option>
+                        </select>
+
+                    </div>
+
+                    <div
+                        class="tm-mask-editor"
+                    >
+
+                        ${createMaskRow(
+                            'tm-mask-os-protocol',
+                            'Protocolo da OS:',
+                            data.osProtocol,
+                            'number'
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-installed-client',
+                            'Nome do cliente instalado:',
+                            data.installedClient
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-pppoe',
+                            'PPPoE da conexão:',
+                            data.pppoe
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-box',
+                            'Caixa:',
+                            data.box
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-client-port',
+                            'Porta do cliente:',
+                            data.clientPort,
+                            'number'
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-box-address',
+                            'Endereço da caixa:',
+                            data.boxAddress
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-olt',
+                            'OLT:',
+                            data.olt
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-slot-olt',
+                            'SlotOLT:',
+                            data.slotOlt,
+                            'number'
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-port-olt',
+                            'PortaOLT:',
+                            data.portOlt,
+                            'number'
+                        )}
+
+                        <div
+                            class="tm-mask-divider"
+                        >
+                            Solicitação Original
+                        </div>
+
+                        ${createMaskRow(
+                            'tm-mask-original-protocol',
+                            'Protocolo',
+                            data.originalProtocol,
+                            'number'
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-original-client',
+                            'Cliente:',
+                            data.originalClient
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-responsible',
+                            'Responsável:',
+                            data.responsible
+                        )}
+
+                        ${createMaskRow(
+                            'tm-mask-tag',
+                            'Etiqueta:',
+                            data.tag
+                        )}
+
+                    </div>
+
+                </main>
+
+                <footer
+                    class="tm-modal-actions"
+                >
+
+                    <button
+                        type="button"
+                        class="tm-modal-secondary-button tm-modal-close-action"
+                    >
+                        Fechar
+                    </button>
+
+                    <button
+                        id="${CONFIG.copyButtonId}"
+                        type="button"
+                        class="tm-modal-primary-button"
+                    >
+                        Copiar Máscara
+                    </button>
+
+                </footer>
+
+            </div>
+        `;
+
+        document.body.appendChild(
+            modal
+        );
+
+        configureIntegerInputs(
+            modal
+        );
+
+        initializeOriginalFields(
+            modal
+        );
+
+        modal
+            .querySelector(
+                '.tm-modal-close'
+            )
+            ?.addEventListener(
+                'click',
+                closeModal
+            );
+
+        modal
+            .querySelector(
+                '.tm-modal-close-action'
+            )
+            ?.addEventListener(
+                'click',
+                closeModal
+            );
+
+        modal.addEventListener(
+            'click',
+            (event) => {
+                if (
+                    event.target ===
+                    modal
+                ) {
+                    closeModal();
+                }
+            }
+        );
+
+        modal
+            .querySelector(
+                `#${CONFIG.copyButtonId}`
+            )
+            ?.addEventListener(
+                'click',
+                async (
+                    event
+                ) => {
+                    const button =
+                        event.currentTarget;
+
+                    try {
+                        const text =
+                            generateMaskFromEditor(
+                                modal
+                            );
+
+                        await copyToClipboard(
+                            text
+                        );
+
+                        showCopyState(
+                            button,
+                            'Máscara copiada!',
+                            'tm-success'
+                        );
+                    } catch (
+                        error
+                    ) {
+                        console.error(
+                            '[Caixa/Inconsistência] Erro ao copiar:',
+                            error
+                        );
+
+                        showCopyState(
+                            button,
+                            'Erro ao copiar',
+                            'tm-error'
+                        );
+                    }
+                }
+            );
+
+        loadCustomerData(
+            modal
+        );
+    }
+
+    /*
+     * =========================================================
+     * BOTÃO
+     * =========================================================
+     */
+
+    function findSplitterContainer(
+        input
+    ) {
+        let element =
+            input;
+
+        while (
+            element &&
+            element !==
+                document.body
+        ) {
+            if (
+                element
+                    .classList
+                    ?.contains(
+                        'MuiFormControl-root'
+                    ) &&
+                element
+                    .querySelector(
+                        `#${CONFIG.splitterInputId}`
+                    )
+            ) {
+                return element;
+            }
+
+            element =
+                element.parentElement;
+        }
+
+        return (
+            input.parentElement ||
+            null
+        );
+    }
+
+    function addSplitterButton() {
+        if (
+            document.getElementById(
+                CONFIG.buttonId
+            )
+        ) {
+            return;
+        }
+
+        const input =
+            document.getElementById(
+                CONFIG.splitterInputId
+            );
+
+        if (!input) {
+            return;
+        }
+
+        const container =
+            findSplitterContainer(
+                input
+            );
+
+        if (!container) {
+            return;
+        }
+
+        if (
+            container
+                .parentElement
+                ?.classList
+                .contains(
+                    'tm-splitter-action-wrapper'
+                )
+        ) {
+            return;
+        }
+
+        const wrapper =
+            document.createElement(
+                'div'
+            );
+
+        wrapper.className =
+            'tm-splitter-action-wrapper';
+
+        container
+            .parentNode
+            .insertBefore(
+                wrapper,
+                container
+            );
+
+        container.classList.add(
+            'tm-splitter-original'
+        );
+
+        wrapper.appendChild(
+            container
+        );
+
+        const button =
+            document.createElement(
+                'button'
+            );
+
+        button.id =
+            CONFIG.buttonId;
+
+        button.type =
+            'button';
+
+        button.title =
+            'Caixa sem Registro / Inconsistência';
+
+        button.setAttribute(
+            'aria-label',
+            'Caixa sem Registro / Inconsistência'
+        );
+
+        button.innerHTML =
+            getWarningIcon();
+
+        button.addEventListener(
+            'click',
+            (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                openModal();
+            }
+        );
+
+        wrapper.appendChild(
+            button
+        );
+    }
+
+    /*
+     * =========================================================
+     * EVENTOS
+     * =========================================================
+     */
+
+    document.addEventListener(
+        'keydown',
+        (event) => {
+            if (
+                event.key ===
+                    'Escape'
+            ) {
+                closeModal();
+            }
+        }
+    );
+
+    /*
+     * =========================================================
+     * OBSERVER
+     * =========================================================
+     */
+
+    const observer =
+        new MutationObserver(
+            () => {
+                if (
+                    mutationScheduled
+                ) {
+                    return;
+                }
+
+                mutationScheduled =
+                    true;
+
+                requestAnimationFrame(
+                    () => {
+                        mutationScheduled =
+                            false;
+
+                        addSplitterButton();
+                    }
+                );
+            }
+        );
+
+    /*
+     * =========================================================
+     * INIT
+     * =========================================================
+     */
+
+    function init() {
+        if (!document.body) {
+            return;
+        }
+
+        injectStyles();
+
+        addSplitterButton();
+
+        observer.observe(
+            document.body,
+            {
+                childList: true,
+                subtree: true,
+            }
+        );
+    }
+
+    if (
+        document.readyState ===
+        'loading'
+    ) {
+        document.addEventListener(
+            'DOMContentLoaded',
+            init,
+            {
+                once: true,
+            }
+        );
+    } else {
+        init();
+    }
+})();
