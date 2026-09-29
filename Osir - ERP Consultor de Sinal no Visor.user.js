@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Osir - ERP Consultor de Sinal no Visor
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      1.8
 // @description  Copia o serial e a OLT traduzida, cola na aba do visor (modo OLT), consulta e retorna a potência RX
-// @author       Você
+// @author       Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/legacy/operations/**
 // @match        *://*.osirnet.com.br/*
 // @match        https://visor.osir.net.br/*
@@ -11,6 +11,11 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_setClipboard
+// @license      MIT
+// @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
 (function() {
