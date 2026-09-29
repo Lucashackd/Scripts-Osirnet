@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Osir - ERP Consultor de Sinal no Visor
-// @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      2.0
-// @description  Copia o serial e a OLT traduzida, cola na aba do visor (modo OLT), consulta e retorna a potência RX
-// @author       Lucashackd
+// @name         Automação Consulta RX - Visor OSIR
+// @namespace    http://tampermonkey.net/
+// @version      1.9
+// @description  Copia o serial e a OLT traduzida, consulta no Visor e retorna a potência RX
+// @author       Você
 // @match        https://erp.osirnet.com.br/ui/*/legacy/operations/**
 // @match        *://*.osirnet.com.br/*
 // @match        https://visor.osir.net.br/*
@@ -11,17 +11,15 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_setClipboard
-// @license      MIT
-// @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20ERP%20Consultor%20de%20Sinal%20no%20Visor.user.js
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20ERP%20Consultor%20de%20Sinal%20no%20Visor.user.js
-// @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // Map com substituições diretas / exceções de mapeamento
+    // =====================================================================
+    // MAPA DE OLTs
+    // =====================================================================
+
     const MAPA_OLT = {
         'PLTDU': 'OLT DU',
         'RGPQM': 'OLT RG_PQM',
@@ -46,30 +44,21 @@
         'FENADOCE CLIENTES': 'OLT Fenadoce'
     };
 
-    /**
-     * Função para traduzir o texto do Access Point
-     * para o nome da OLT no Visor.
-     */
     function traduzirAccessPoint(rawText) {
         if (!rawText) return '';
 
-        // 1. Limpa espaços extras
         let cleaned = rawText.trim();
 
-        // 2. Remove "Fibra" do início
         cleaned = cleaned.replace(/^Fibra\s+/i, '');
 
-        // 3. Remove "Slot XX Porta XX" do final
         cleaned = cleaned
             .replace(/\s+Slot\s+\d+\s+Porta\s+\d+$/i, '')
             .trim();
 
-        // 4. Verifica mapeamentos específicos
         if (MAPA_OLT[cleaned]) {
             return MAPA_OLT[cleaned];
         }
 
-        // 5. Regra padrão
         if (
             !cleaned.startsWith('OLT ') &&
             !cleaned.startsWith('OTL ')
@@ -80,10 +69,11 @@
         return cleaned;
     }
 
-    /**
-     * Define valor em input disparando os eventos
-     * necessários para frameworks como React.
-     */
+
+    // =====================================================================
+    // HELPERS
+    // =====================================================================
+
     function setNativeInputValue(input, value) {
         const nativeSetter = Object
             .getOwnPropertyDescriptor(
@@ -109,22 +99,20 @@
 
 
     // =====================================================================
-    // LÓGICA PARA A PÁGINA DO VISOR OSIR
+    // VISOR OSIR
     // =====================================================================
 
     if (window.location.href.includes('visor.osir.net.br')) {
 
         console.log(
-            "Visor OSIR detectado. Aguardando requisições..."
+            '[RX AUTOMATION] Visor OSIR detectado. Aguardando requisições...'
         );
+
 
         const sleep = (ms) =>
             new Promise(resolve => setTimeout(resolve, ms));
 
 
-        /**
-         * Normaliza texto para facilitar comparações.
-         */
         function normalizarTexto(texto) {
             return (texto || '')
                 .replace(/\s+/g, ' ')
@@ -133,9 +121,6 @@
         }
 
 
-        /**
-         * Espera um elemento aparecer no DOM.
-         */
         async function esperarElemento(
             getElement,
             timeout = 5000,
@@ -158,15 +143,21 @@
         }
 
 
-        /**
-         * Localiza o botão que muda o modo para OLT.
-         */
+        // =================================================================
+        // BOTÕES CIDADE / OLT
+        // =================================================================
+
+        function encontrarContainerModoConsulta() {
+            return document.querySelector(
+                'div.relative.grid.grid-cols-2'
+            );
+        }
+
+
         function encontrarBotaoModoOlt() {
 
             const container =
-                document.querySelector(
-                    'div.relative.grid.grid-cols-2'
-                );
+                encontrarContainerModoConsulta();
 
             if (!container) {
                 return null;
@@ -174,13 +165,17 @@
 
             const botoes =
                 Array.from(
-                    container.querySelectorAll('button')
+                    container.querySelectorAll(
+                        'button[type="button"]'
+                    )
                 );
 
             return (
                 botoes.find(
                     btn =>
-                        normalizarTexto(btn.textContent) === 'OLT'
+                        normalizarTexto(
+                            btn.textContent
+                        ) === 'OLT'
                 ) ||
                 botoes[1] ||
                 null
@@ -189,16 +184,42 @@
 
 
         /**
-         * Localiza o botão principal do seletor de OLT.
-         *
-         * Estrutura:
-         *
-         * .fade-swap
-         *   .relative
-         *      button
-         *      input Buscar OLT...
-         *      button[data-index]
+         * NOVO:
+         * Localiza especificamente o botão "Cidade".
          */
+        function encontrarBotaoModoCidade() {
+
+            const container =
+                encontrarContainerModoConsulta();
+
+            if (!container) {
+                return null;
+            }
+
+            const botoes =
+                Array.from(
+                    container.querySelectorAll(
+                        'button[type="button"]'
+                    )
+                );
+
+            return (
+                botoes.find(
+                    btn =>
+                        normalizarTexto(
+                            btn.textContent
+                        ) === 'CIDADE'
+                ) ||
+                botoes[0] ||
+                null
+            );
+        }
+
+
+        // =================================================================
+        // SELETOR DE OLT
+        // =================================================================
+
         function encontrarSeletorOlt() {
 
             const candidatos =
@@ -211,7 +232,9 @@
             return candidatos.find(btn => {
 
                 const texto =
-                    normalizarTexto(btn.textContent);
+                    normalizarTexto(
+                        btn.textContent
+                    );
 
                 return (
                     texto === 'SELECIONE UMA OLT' ||
@@ -224,11 +247,6 @@
         }
 
 
-        /**
-         * Abre o seletor de OLT,
-         * pesquisa a OLT desejada
-         * e seleciona a opção correta.
-         */
         async function selecionarOlt(olt) {
 
             const oltNormalizada =
@@ -241,9 +259,9 @@
             }
 
 
-            // -------------------------------------------------------------
-            // 1. Localiza botão do seletor
-            // -------------------------------------------------------------
+            // =============================================================
+            // 1. Localiza seletor
+            // =============================================================
 
             const seletor =
                 await esperarElemento(
@@ -258,9 +276,9 @@
             }
 
 
-            // -------------------------------------------------------------
+            // =============================================================
             // 2. Verifica se já está selecionada
-            // -------------------------------------------------------------
+            // =============================================================
 
             if (
                 normalizarTexto(
@@ -268,7 +286,7 @@
                 ) === oltNormalizada
             ) {
                 console.log(
-                    'OLT já selecionada:',
+                    '[RX AUTOMATION] OLT já selecionada:',
                     olt
                 );
 
@@ -276,24 +294,23 @@
             }
 
 
-            // -------------------------------------------------------------
+            // =============================================================
             // 3. Abre dropdown
-            // -------------------------------------------------------------
+            // =============================================================
 
             console.log(
-                'Abrindo seletor de OLT...'
+                '[RX AUTOMATION] Abrindo seletor de OLT...'
             );
 
             seletor.click();
-
 
             const wrapper =
                 seletor.parentElement;
 
 
-            // -------------------------------------------------------------
-            // 4. Localiza campo "Buscar OLT..."
-            // -------------------------------------------------------------
+            // =============================================================
+            // 4. Localiza pesquisa
+            // =============================================================
 
             const campoBusca =
                 await esperarElemento(
@@ -312,14 +329,9 @@
             }
 
 
-            // -------------------------------------------------------------
-            // 5. Digita a OLT traduzida
-            // -------------------------------------------------------------
-
-            console.log(
-                'Pesquisando OLT:',
-                olt
-            );
+            // =============================================================
+            // 5. Pesquisa a OLT
+            // =============================================================
 
             campoBusca.focus();
 
@@ -328,14 +340,19 @@
                 olt
             );
 
+            console.log(
+                '[RX AUTOMATION] Pesquisando OLT:',
+                olt
+            );
 
-            // Aguarda React atualizar a lista
+
+            // React atualiza a listagem
             await sleep(250);
 
 
-            // -------------------------------------------------------------
-            // 6. Pressiona seta para baixo
-            // -------------------------------------------------------------
+            // =============================================================
+            // 6. Seta para baixo
+            // =============================================================
 
             campoBusca.dispatchEvent(
                 new KeyboardEvent(
@@ -365,9 +382,9 @@
             );
 
 
-            // -------------------------------------------------------------
-            // 7. Localiza opção correspondente
-            // -------------------------------------------------------------
+            // =============================================================
+            // 7. Procura opção
+            // =============================================================
 
             const opcao =
                 await esperarElemento(
@@ -381,14 +398,12 @@
                             );
 
 
-                        // Correspondência EXATA
                         const exata =
-                            opcoes.find(btn =>
-
-                                normalizarTexto(
-                                    btn.textContent
-                                ) === oltNormalizada
-
+                            opcoes.find(
+                                btn =>
+                                    normalizarTexto(
+                                        btn.textContent
+                                    ) === oltNormalizada
                             );
 
 
@@ -397,11 +412,6 @@
                         }
 
 
-                        /*
-                         * Caso a pesquisa tenha deixado
-                         * somente uma opção disponível,
-                         * usamos essa opção como fallback.
-                         */
                         if (opcoes.length === 1) {
                             return opcoes[0];
                         }
@@ -416,30 +426,28 @@
 
 
             if (!opcao) {
-
                 throw new Error(
                     `OLT não encontrada na lista: ${olt}`
                 );
-
             }
 
 
             console.log(
-                'Opção localizada:',
+                '[RX AUTOMATION] Opção encontrada:',
                 opcao.textContent.trim()
             );
 
 
-            // -------------------------------------------------------------
-            // 8. Seleciona a OLT
-            // -------------------------------------------------------------
+            // =============================================================
+            // 8. Seleciona
+            // =============================================================
 
             opcao.click();
 
 
-            // -------------------------------------------------------------
-            // 9. Confirma que a seleção realmente ocorreu
-            // -------------------------------------------------------------
+            // =============================================================
+            // 9. Confirma
+            // =============================================================
 
             const selecionada =
                 await esperarElemento(
@@ -464,31 +472,30 @@
 
 
             if (!selecionada) {
-
                 throw new Error(
                     `Falha ao confirmar a seleção da OLT: ${olt}`
                 );
-
             }
 
 
             console.log(
-                'OLT selecionada com sucesso:',
+                '[RX AUTOMATION] OLT selecionada:',
                 olt
             );
         }
 
 
-        /**
-         * Localiza o input do serial.
-         *
-         * O input "Buscar OLT..." precisa ser ignorado.
-         */
+        // =================================================================
+        // INPUT DO SERIAL
+        // =================================================================
+
         function encontrarInputSerial() {
 
             const inputs =
                 Array.from(
-                    document.querySelectorAll('input')
+                    document.querySelectorAll(
+                        'input'
+                    )
                 )
                 .filter(
                     input =>
@@ -497,10 +504,6 @@
                         ) !== 'Buscar OLT...'
                 );
 
-
-            // -------------------------------------------------------------
-            // Primeiro tenta localizar por atributos
-            // -------------------------------------------------------------
 
             const porIdentificacao =
                 inputs.find(input => {
@@ -519,7 +522,6 @@
                             .join(' ')
                         );
 
-
                     return identificacao
                         .includes('SERIAL');
 
@@ -530,11 +532,6 @@
                 return porIdentificacao;
             }
 
-
-            // -------------------------------------------------------------
-            // Fallback:
-            // procura primeiro input visível
-            // -------------------------------------------------------------
 
             return (
                 inputs.find(
@@ -548,7 +545,7 @@
 
 
         // =================================================================
-        // RECEBE SOLICITAÇÃO VINDO DO ERP
+        // RECEBE SOLICITAÇÃO DO ERP
         // =================================================================
 
         GM_addValueChangeListener(
@@ -575,7 +572,7 @@
 
 
                 console.log(
-                    "Requisição recebida:",
+                    '[RX AUTOMATION] Requisição recebida:',
                     {
                         serial,
                         olt
@@ -586,7 +583,7 @@
                 try {
 
                     // =====================================================
-                    // 1. MUDA PARA MODO OLT
+                    // 1. MODO OLT
                     // =====================================================
 
                     const oltButton =
@@ -597,29 +594,26 @@
 
 
                     if (!oltButton) {
-
                         throw new Error(
                             'Botão do modo OLT não encontrado'
                         );
-
                     }
 
 
                     oltButton.click();
 
-
                     await sleep(300);
 
 
                     // =====================================================
-                    // 2. SELECIONA A OLT
+                    // 2. SELECIONA OLT
                     // =====================================================
 
                     await selecionarOlt(olt);
 
 
                     // =====================================================
-                    // 3. LOCALIZA INPUT DO SERIAL
+                    // 3. SERIAL
                     // =====================================================
 
                     const serialInput =
@@ -630,22 +624,10 @@
 
 
                     if (!serialInput) {
-
                         throw new Error(
                             'Input do serial não encontrado'
                         );
-
                     }
-
-
-                    // =====================================================
-                    // 4. PREENCHE SERIAL
-                    // =====================================================
-
-                    console.log(
-                        'Preenchendo serial:',
-                        serial
-                    );
 
 
                     serialInput.focus();
@@ -657,12 +639,17 @@
                     );
 
 
-                    // Aguarda atualização do React
+                    console.log(
+                        '[RX AUTOMATION] Serial preenchido:',
+                        serial
+                    );
+
+
                     await sleep(300);
 
 
                     // =====================================================
-                    // 5. CLICA EM CONSULTAR
+                    // 4. CONSULTAR
                     // =====================================================
 
                     const submitBtn =
@@ -672,19 +659,18 @@
 
 
                     if (!submitBtn) {
-
                         throw new Error(
                             'Botão Consultar não encontrado'
                         );
-
                     }
 
 
-                    submitBtn.disabled = false;
+                    submitBtn.disabled =
+                        false;
 
 
                     console.log(
-                        'Executando consulta...'
+                        '[RX AUTOMATION] Executando primeira consulta...'
                     );
 
 
@@ -692,17 +678,21 @@
 
 
                     // =====================================================
-                    // 6. ESPERA RESULTADO
+                    // 5. AGUARDA RESULTADO
+                    //
+                    // false = recuperação de timeout ainda NÃO foi usada
                     // =====================================================
 
-                    aguardarResultado(serial);
-
+                    aguardarResultado(
+                        serial,
+                        false
+                    );
 
                 }
                 catch (e) {
 
                     console.error(
-                        "Erro no processamento do Visor:",
+                        '[RX AUTOMATION] Erro:',
                         e
                     );
 
@@ -721,15 +711,157 @@
         );
 
 
-        /**
-         * Aguarda o resultado da consulta
-         * e captura a potência RX.
-         */
-        function aguardarResultado(targetSerial) {
+        // =================================================================
+        // NOVO: RECUPERAÇÃO DE TIMEOUT
+        // =================================================================
+
+        async function tentarRecuperacaoTimeout(
+            targetSerial
+        ) {
+
+            console.warn(
+                '[RX AUTOMATION] Primeiro timeout detectado.'
+            );
+
+
+            console.warn(
+                '[RX AUTOMATION] Tentando recuperação: Cidade -> Consultar novamente.'
+            );
+
+
+            // =============================================================
+            // 1. LOCALIZA O BOTÃO CIDADE
+            // =============================================================
+
+            const cidadeButton =
+                await esperarElemento(
+                    encontrarBotaoModoCidade,
+                    3000
+                );
+
+
+            if (!cidadeButton) {
+
+                console.error(
+                    '[RX AUTOMATION] Não foi possível localizar o botão Cidade.'
+                );
+
+
+                GM_setValue(
+                    'visor_serial_result',
+                    'ERRO: Timeout (não carregou)'
+                );
+
+                return;
+            }
+
+
+            // =============================================================
+            // 2. CLICA EM CIDADE
+            // =============================================================
+
+            console.log(
+                '[RX AUTOMATION] Clicando em Cidade...'
+            );
+
+
+            cidadeButton.click();
+
+
+            /*
+             * Aguarda o React concluir a mudança de estado
+             * e renderizar novamente o formulário.
+             */
+            await sleep(500);
+
+
+            // =============================================================
+            // 3. LOCALIZA NOVAMENTE O BOTÃO CONSULTAR
+            //
+            // O botão anterior pode ter sido destruído pelo React.
+            // Por isso NÃO reaproveitamos a referência antiga.
+            // =============================================================
+
+            const submitBtn =
+                await esperarElemento(
+                    () =>
+                        document.querySelector(
+                            'button[type="submit"]'
+                        ),
+                    3000,
+                    100
+                );
+
+
+            if (!submitBtn) {
+
+                console.error(
+                    '[RX AUTOMATION] Botão Consultar não encontrado após mudar para Cidade.'
+                );
+
+
+                GM_setValue(
+                    'visor_serial_result',
+                    'ERRO: Timeout (não carregou)'
+                );
+
+                return;
+            }
+
+
+            // =============================================================
+            // 4. NOVA CONSULTA
+            // =============================================================
+
+            submitBtn.disabled =
+                false;
+
+
+            console.log(
+                '[RX AUTOMATION] Reenviando consulta após timeout...'
+            );
+
+
+            submitBtn.click();
+
+
+            // =============================================================
+            // 5. VOLTA A ESPERAR RESULTADO
+            //
+            // true = recuperação já foi utilizada.
+            // Se ocorrer novo timeout, desiste.
+            // =============================================================
+
+            aguardarResultado(
+                targetSerial,
+                true
+            );
+        }
+
+
+        // =================================================================
+        // AGUARDA RESULTADO
+        // =================================================================
+
+        function aguardarResultado(
+            targetSerial,
+            recuperacaoJaTentada = false
+        ) {
 
             let tentativas = 0;
 
-            const maxTentativas = 40;
+            /*
+             * 40 tentativas x 500 ms = aproximadamente 20 segundos
+             */
+            const maxTentativas =
+                40;
+
+
+            console.log(
+                recuperacaoJaTentada
+                    ? '[RX AUTOMATION] Aguardando resultado da tentativa de recuperação...'
+                    : '[RX AUTOMATION] Aguardando resultado da consulta inicial...'
+            );
 
 
             const checkInterval =
@@ -801,7 +933,7 @@
 
 
                                     console.log(
-                                        "Resultado detectado. Aguardando 1 segundo para estabilização da div..."
+                                        '[RX AUTOMATION] Resultado detectado. Aguardando estabilização...'
                                     );
 
 
@@ -846,7 +978,7 @@
                                         if (rxValue) {
 
                                             console.log(
-                                                "Potência RX capturada após 1s:",
+                                                '[RX AUTOMATION] Potência RX capturada:',
                                                 rxValue
                                             );
 
@@ -882,6 +1014,12 @@
                         );
 
 
+                        console.error(
+                            '[RX AUTOMATION] Erro lendo resultado:',
+                            e
+                        );
+
+
                         GM_setValue(
                             'visor_serial_result',
                             'ERRO: Falha na leitura'
@@ -892,7 +1030,10 @@
                     }
 
 
-                    // Timeout após ~20 segundos
+                    // =====================================================
+                    // TIMEOUT
+                    // =====================================================
+
                     if (
                         tentativas >=
                         maxTentativas
@@ -900,6 +1041,57 @@
 
                         clearInterval(
                             checkInterval
+                        );
+
+
+                        // =================================================
+                        // PRIMEIRO TIMEOUT
+                        //
+                        // Ainda NÃO envia erro ao ERP.
+                        // Tenta recuperação.
+                        // =================================================
+
+                        if (
+                            !recuperacaoJaTentada
+                        ) {
+
+                            console.warn(
+                                '[RX AUTOMATION] Timeout inicial. Iniciando recuperação...'
+                            );
+
+
+                            tentarRecuperacaoTimeout(
+                                targetSerial
+                            )
+                            .catch(error => {
+
+                                console.error(
+                                    '[RX AUTOMATION] Falha durante recuperação:',
+                                    error
+                                );
+
+
+                                GM_setValue(
+                                    'visor_serial_result',
+                                    'ERRO: Timeout (não carregou)'
+                                );
+
+                            });
+
+
+                            return;
+                        }
+
+
+                        // =================================================
+                        // SEGUNDO TIMEOUT
+                        //
+                        // Recuperação já foi tentada.
+                        // Agora desiste definitivamente.
+                        // =================================================
+
+                        console.error(
+                            '[RX AUTOMATION] Segundo timeout. Desistindo da consulta.'
                         );
 
 
@@ -914,24 +1106,19 @@
         }
 
 
-        /*
-         * Não continua executando a parte destinada
-         * ao ERP quando estivermos no Visor.
-         */
         return;
     }
 
 
 
     // =====================================================================
-    // LÓGICA PARA O SISTEMA PRINCIPAL (ERP OSIR)
+    // ERP OSIR
     // =====================================================================
 
     const BUTTON_ID =
         'tm-visor-rx-button';
 
 
-    // Ícone de olho SVG
     const EYE_ICON_SVG = `
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -950,9 +1137,6 @@
     `;
 
 
-    /**
-     * Restaura o botão para o estado inicial.
-     */
     function setButtonDefaultState(btn) {
 
         btn.innerHTML =
@@ -966,9 +1150,6 @@
     }
 
 
-    /**
-     * Injeta botão ao lado do serial.
-     */
     function injetarBotaoSeNecessario() {
 
         const inputEl =
@@ -1047,7 +1228,6 @@
         setButtonDefaultState(btn);
 
 
-        // Hover
         btn.onmouseover = () => {
 
             if (!btn.dataset.loading) {
@@ -1074,9 +1254,9 @@
         };
 
 
-        // ================================================================
-        // CLIQUE NO BOTÃO
-        // ================================================================
+        // =================================================================
+        // CLIQUE
+        // =================================================================
 
         btn.addEventListener(
             'click',
@@ -1098,9 +1278,9 @@
                 }
 
 
-                // ---------------------------------------------------------
-                // Captura ponto de acesso / OLT
-                // ---------------------------------------------------------
+                // =========================================================
+                // OLT
+                // =========================================================
 
                 const oltEl =
                     document.querySelector(
@@ -1126,20 +1306,20 @@
 
 
                 console.log(
-                    'OLT original:',
+                    '[RX AUTOMATION] OLT original:',
                     rawOlt
                 );
 
 
                 console.log(
-                    'OLT traduzida:',
+                    '[RX AUTOMATION] OLT traduzida:',
                     oltTraduzida
                 );
 
 
-                // ---------------------------------------------------------
-                // Estado de carregamento
-                // ---------------------------------------------------------
+                // =========================================================
+                // LOADING
+                // =========================================================
 
                 btn.dataset.loading =
                     'true';
@@ -1160,9 +1340,9 @@
                     '#000000';
 
 
-                // ---------------------------------------------------------
-                // Cria payload
-                // ---------------------------------------------------------
+                // =========================================================
+                // PAYLOAD
+                // =========================================================
 
                 const payload =
                     JSON.stringify({
@@ -1176,9 +1356,9 @@
                     });
 
 
-                // ---------------------------------------------------------
-                // Reseta chave para sempre gerar evento
-                // ---------------------------------------------------------
+                // =========================================================
+                // ENVIA AO VISOR
+                // =========================================================
 
                 GM_setValue(
                     'visor_serial_request',
@@ -1202,9 +1382,9 @@
         );
 
 
-        // ================================================================
-        // ALINHAMENTO
-        // ================================================================
+        // =================================================================
+        // LAYOUT
+        // =================================================================
 
         container.parentNode.style.display =
             'flex';
@@ -1222,7 +1402,7 @@
 
 
     // =====================================================================
-    // OBSERVER PARA SPA
+    // OBSERVER DA SPA
     // =====================================================================
 
     const observer =
@@ -1247,7 +1427,7 @@
 
 
     // =====================================================================
-    // RECEBE RESULTADO DO VISOR
+    // RESULTADO RECEBIDO DO VISOR
     // =====================================================================
 
     GM_addValueChangeListener(
@@ -1270,13 +1450,13 @@
                     );
 
 
-                // ---------------------------------------------------------
-                // Copia RX
-                // ---------------------------------------------------------
+                // =========================================================
+                // COPIA RX
+                // =========================================================
 
                 if (
                     !rx_value.includes(
-                        "ERRO"
+                        'ERRO'
                     )
                 ) {
 
@@ -1287,9 +1467,9 @@
                 }
 
 
-                // ---------------------------------------------------------
-                // Atualiza botão
-                // ---------------------------------------------------------
+                // =========================================================
+                // BOTÃO
+                // =========================================================
 
                 if (btn) {
 
@@ -1298,7 +1478,7 @@
 
                     if (
                         rx_value.includes(
-                            "ERRO"
+                            'ERRO'
                         )
                     ) {
 
@@ -1333,9 +1513,9 @@
                     }
 
 
-                    // -----------------------------------------------------
-                    // Volta ao estado inicial após 5 segundos
-                    // -----------------------------------------------------
+                    // =====================================================
+                    // RESTAURA EM 5 SEGUNDOS
+                    // =====================================================
 
                     setTimeout(
                         () => {
@@ -1358,9 +1538,9 @@
                 }
 
 
-                // ---------------------------------------------------------
-                // Limpa valor compartilhado
-                // ---------------------------------------------------------
+                // =========================================================
+                // LIMPA RESULTADO
+                // =========================================================
 
                 setTimeout(
                     () => {
