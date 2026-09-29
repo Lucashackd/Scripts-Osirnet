@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - ERP Consultor de Sinal no Visor
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      1.8
+// @version      2.0
 // @description  Copia o serial e a OLT traduzida, cola na aba do visor (modo OLT), consulta e retorna a potência RX
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/legacy/operations/**
@@ -27,7 +27,9 @@
         'RGPQM': 'OLT RG_PQM',
         'RG_CE': 'OLT RG_CE_1',
         'STL_CE3_R': 'OLT CE3_R',
+        'STL_CE4_R': 'OLT CE4_R',
         'CSS1': 'OLT CSS_1',
+        'CSS2': 'OLT CSS_2',
         'RGJUN1': 'OLT RG_JUN_1',
         'RGQNT': 'RG_QNT',
         'SVPGAB': 'OLT GAB',
@@ -37,7 +39,11 @@
         'ZN': 'OLT ZN',
         'FGT': 'OLT FGT',
         'GER': 'OLT GER',
-        'VCII': 'OLT VCII'
+        'VCII': 'OLT VCII',
+        'RGPVN': 'OLT PVN',
+        'STL_TAB': 'OLT STLTAB',
+        'RGCBA': 'OLT CBA',
+        'FENADOCE CLIENTES': 'OLT Fenadoce'
     };
 
     /**
