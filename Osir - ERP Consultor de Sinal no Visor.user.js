@@ -46,7 +46,8 @@
         'RGPVN': 'OLT PVN',
         'STL_TAB': 'OLT STLTAB',
         'RGCBA': 'OLT CBA',
-        'FENADOCE CLIENTES': 'OLT Fenadoce'
+        'FENADOCE CLIENTES': 'OLT Fenadoce',
+        'BGE_1': 'OLT BGE'
     };
 
 
