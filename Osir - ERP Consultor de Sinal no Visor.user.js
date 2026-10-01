@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Osir - ERP Consultor de Sinal no Visor
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      2.2
-// @description  Copia o serial e a OLT traduzida, cola na aba do visor (modo OLT), consulta e retorna a potência RX
+// @version      2.7
+// @description  Consulta a potência RX no Visor OSIR e permite copiar manualmente o resultado
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/legacy/operations/**
 // @match        *://*.osirnet.com.br/*
@@ -10,7 +10,6 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
-// @grant        GM_setClipboard
 // @license      MIT
 // @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
 // @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20ERP%20Consultor%20de%20Sinal%20no%20Visor.user.js
@@ -18,11 +17,26 @@
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
+
     // =====================================================================
-    // MAPA DE TRADUÇÃO DAS OLTs
+    // CONFIGURAÇÕES
+    // =====================================================================
+
+    const REQUEST_KEY =
+        'osir_visor_rx_request_v26';
+
+    const RESULT_KEY =
+        'osir_visor_rx_result_v26';
+
+    const NOTICE_DURATION =
+        15000;
+
+
+    // =====================================================================
+    // MAPA DE OLTs
     // =====================================================================
 
     const MAPA_OLT = {
@@ -46,13 +60,12 @@
         'RGPVN': 'OLT PVN',
         'STL_TAB': 'OLT STLTAB',
         'RGCBA': 'OLT CBA',
-        'FENADOCE CLIENTES': 'OLT Fenadoce',
-        'BGE_1': 'OLT BGE'
+        'FENADOCE CLIENTES': 'OLT Fenadoce'
     };
 
 
     // =====================================================================
-    // TRADUÇÃO DO PONTO DE ACESSO
+    // TRADUÇÃO DA OLT
     // =====================================================================
 
     function traduzirAccessPoint(rawText) {
@@ -60,111 +73,291 @@
             return '';
         }
 
-        let cleaned = rawText.trim();
+        let cleaned =
+            rawText.trim();
 
-        // Remove "Fibra" do início
-        cleaned = cleaned.replace(/^Fibra\s+/i, '');
 
-        // Remove "Slot XX Porta XX" do final
-        cleaned = cleaned
-            .replace(/\s+Slot\s+\d+\s+Porta\s+\d+$/i, '')
-            .trim();
+        // =================================================================
+        // REMOVE "FIBRA" DO INÍCIO
+        //
+        // Ex:
+        // Fibra CSS1 Dedicados
+        // -> CSS1 Dedicados
+        // =================================================================
 
-        // Mapeamentos especiais
-        if (MAPA_OLT[cleaned]) {
-            return MAPA_OLT[cleaned];
+        cleaned =
+            cleaned.replace(
+                /^Fibra\s+/i,
+                ''
+            );
+
+
+        // =================================================================
+        // REMOVE SUFIXOS AUXILIARES
+        //
+        // Os sufixos podem eventualmente aparecer em ordens diferentes.
+        //
+        // Exemplos aceitos:
+        //
+        // CSS1 Dedicados
+        //
+        // CSS1 Dedicados Slot 1 Porta 2
+        //
+        // CSS1 Slot 1 Porta 2 Dedicados
+        //
+        // Todos resultam em:
+        //
+        // CSS1
+        // =================================================================
+
+        let valorAnterior;
+
+
+        do {
+
+            valorAnterior =
+                cleaned;
+
+
+            // -------------------------------------------------------------
+            // REMOVE "DEDICADOS" DO FINAL
+            // -------------------------------------------------------------
+
+            cleaned =
+                cleaned.replace(
+                    /\s+Dedicados$/i,
+                    ''
+                );
+
+
+            // -------------------------------------------------------------
+            // REMOVE "SLOT XX PORTA XX" DO FINAL
+            // -------------------------------------------------------------
+
+            cleaned =
+                cleaned.replace(
+                    /\s+Slot\s+\d+\s+Porta\s+\d+$/i,
+                    ''
+                );
+
+
+            cleaned =
+                cleaned.trim();
+
+
+        }
+        while (
+            cleaned !==
+            valorAnterior
+        );
+
+
+        // =================================================================
+        // MAPEAMENTOS ESPECIAIS
+        // =================================================================
+
+        if (
+            MAPA_OLT[cleaned]
+        ) {
+
+            return MAPA_OLT[
+                cleaned
+            ];
         }
 
-        // Regra padrão
+
+        // =================================================================
+        // REGRA PADRÃO
+        // =================================================================
+
         if (
             !cleaned.startsWith('OLT ') &&
             !cleaned.startsWith('OTL ')
         ) {
+
             return `OLT ${cleaned}`;
         }
+
 
         return cleaned;
     }
 
 
     // =====================================================================
-    // HELPER PARA INPUTS REACT
+    // INPUT REACT
     // =====================================================================
 
-    function setNativeInputValue(input, value) {
-        const nativeSetter = Object
-            .getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype,
-                'value'
-            )
-            .set;
+    function setNativeInputValue(
+        input,
+        value
+    ) {
+        const nativeSetter =
+            Object
+                .getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype,
+                    'value'
+                )
+                .set;
 
-        nativeSetter.call(input, value);
 
-        input.dispatchEvent(
-            new Event('input', {
-                bubbles: true
-            })
+        nativeSetter.call(
+            input,
+            value
         );
 
+
         input.dispatchEvent(
-            new Event('change', {
-                bubbles: true
-            })
+            new Event(
+                'input',
+                {
+                    bubbles: true
+                }
+            )
+        );
+
+
+        input.dispatchEvent(
+            new Event(
+                'change',
+                {
+                    bubbles: true
+                }
+            )
         );
     }
 
 
     // =====================================================================
-    // VISOR OSIR
+    // VISOR
     // =====================================================================
 
-    if (window.location.href.includes('visor.osir.net.br')) {
+    if (
+        window.location.hostname ===
+        'visor.osir.net.br'
+    ) {
 
         console.log(
-            '[RX AUTOMATION] Visor OSIR detectado. Aguardando requisições...'
+            '[RX AUTOMATION 2.7] Visor detectado.'
         );
 
 
-        const sleep = (ms) =>
-            new Promise(resolve => setTimeout(resolve, ms));
+        const sleep =
+            (ms) =>
+                new Promise(
+                    resolve =>
+                        setTimeout(
+                            resolve,
+                            ms
+                        )
+                );
 
 
         function normalizarTexto(texto) {
-            return (texto || '')
-                .replace(/\s+/g, ' ')
+            return String(
+                texto || ''
+            )
+                .replace(
+                    /\s+/g,
+                    ' '
+                )
                 .trim()
                 .toUpperCase();
         }
 
-
-        // =================================================================
-        // AGUARDA UM ELEMENTO EXISTIR
-        // =================================================================
 
         async function esperarElemento(
             getElement,
             timeout = 5000,
             intervalo = 100
         ) {
-            const inicio = Date.now();
+            const inicio =
+                Date.now();
 
-            while (Date.now() - inicio < timeout) {
-                const elemento = getElement();
+
+            while (
+                Date.now() - inicio <
+                timeout
+            ) {
+
+                const elemento =
+                    getElement();
+
 
                 if (elemento) {
                     return elemento;
                 }
 
-                await sleep(intervalo);
+
+                await sleep(
+                    intervalo
+                );
             }
+
 
             return null;
         }
 
 
         // =================================================================
-        // BOTÕES CIDADE / OLT
+        // RESULTADOS
+        // =================================================================
+
+        function enviarResultado(
+            rx,
+            oltDiferente
+        ) {
+            const resultado = {
+                tipo:
+                    'sucesso',
+
+                rx:
+                    rx,
+
+                oltDiferente:
+                    Boolean(
+                        oltDiferente
+                    ),
+
+                timestamp:
+                    Date.now()
+            };
+
+
+            GM_setValue(
+                RESULT_KEY,
+                JSON.stringify(
+                    resultado
+                )
+            );
+        }
+
+
+        function enviarErro(
+            mensagem
+        ) {
+            const resultado = {
+                tipo:
+                    'erro',
+
+                mensagem:
+                    `ERRO: ${mensagem}`,
+
+                timestamp:
+                    Date.now()
+            };
+
+
+            GM_setValue(
+                RESULT_KEY,
+                JSON.stringify(
+                    resultado
+                )
+            );
+        }
+
+
+        // =================================================================
+        // MODO OLT / CIDADE
         // =================================================================
 
         function encontrarContainerModoConsulta() {
@@ -178,9 +371,11 @@
             const container =
                 encontrarContainerModoConsulta();
 
+
             if (!container) {
                 return null;
             }
+
 
             const botoes =
                 Array.from(
@@ -189,14 +384,18 @@
                     )
                 );
 
+
             return (
                 botoes.find(
                     btn =>
                         normalizarTexto(
                             btn.textContent
-                        ) === 'OLT'
-                ) ||
-                botoes[1] ||
+                        ) ===
+                        'OLT'
+                )
+                ||
+                botoes[1]
+                ||
                 null
             );
         }
@@ -206,9 +405,11 @@
             const container =
                 encontrarContainerModoConsulta();
 
+
             if (!container) {
                 return null;
             }
+
 
             const botoes =
                 Array.from(
@@ -217,14 +418,18 @@
                     )
                 );
 
+
             return (
                 botoes.find(
                     btn =>
                         normalizarTexto(
                             btn.textContent
-                        ) === 'CIDADE'
-                ) ||
-                botoes[0] ||
+                        ) ===
+                        'CIDADE'
+                )
+                ||
+                botoes[0]
+                ||
                 null
             );
         }
@@ -242,53 +447,88 @@
                     )
                 );
 
+
             return (
                 botoes.find(
                     btn =>
-                        btn.offsetParent !== null
-                ) ||
-                botoes[0] ||
+                        btn.offsetParent !==
+                        null
+                )
+                ||
+                botoes[0]
+                ||
                 null
             );
         }
 
 
         // =================================================================
-        // DETECTA "ONT NÃO ENCONTRADA NESTA OLT"
+        // DETECÇÃO DOS AVISOS
         // =================================================================
 
-        function encontrarAvisoOntNaoEncontradaNaOlt() {
+        function detectarAvisosOntNaoEncontrada() {
+
+            let avisoOlt =
+                null;
+
+            let avisoCidade =
+                null;
+
 
             const divs =
                 Array.from(
-                    document.querySelectorAll('div')
+                    document.querySelectorAll(
+                        'div'
+                    )
                 );
 
-            return (
-                divs.find(div => {
 
-                    const texto =
-                        normalizarTexto(
-                            div.textContent
-                        );
+            for (
+                const div of divs
+            ) {
 
-                    return (
-                        texto ===
-                        'ONT NÃO ENCONTRADA NESTA OLT'
+                const texto =
+                    normalizarTexto(
+                        div.textContent
                     );
 
-                }) ||
-                null
-            );
+
+                if (
+                    texto.includes(
+                        'ONT NÃO ENCONTRADA EM NENHUMA OLT'
+                    )
+                ) {
+                    avisoCidade =
+                        div;
+                }
+
+
+                if (
+                    texto.includes(
+                        'ONT NÃO ENCONTRADA NESTA OLT'
+                    )
+                ) {
+                    avisoOlt =
+                        div;
+                }
+            }
+
+
+            return {
+                olt:
+                    avisoOlt,
+
+                cidade:
+                    avisoCidade
+            };
         }
 
 
         // =================================================================
-        // SELETOR DE OLT
+        // SELETOR OLT
         // =================================================================
 
         function encontrarSeletorOlt() {
-
             const candidatos =
                 Array.from(
                     document.querySelectorAll(
@@ -297,32 +537,50 @@
                 );
 
 
-            return candidatos.find(btn => {
+            return (
+                candidatos.find(
+                    btn => {
 
-                const texto =
-                    normalizarTexto(
-                        btn.textContent
-                    );
+                        const texto =
+                            normalizarTexto(
+                                btn.textContent
+                            );
 
-                return (
-                    texto === 'SELECIONE UMA OLT' ||
-                    texto.startsWith('OLT ') ||
-                    texto.startsWith('OTL ') ||
-                    texto === 'RG_QNT'
-                );
 
-            }) || null;
+                        return (
+                            texto ===
+                                'SELECIONE UMA OLT'
+                            ||
+                            texto.startsWith(
+                                'OLT '
+                            )
+                            ||
+                            texto.startsWith(
+                                'OTL '
+                            )
+                            ||
+                            texto ===
+                                'RG_QNT'
+                        );
+                    }
+                )
+                ||
+                null
+            );
         }
 
 
         // =================================================================
-        // SELECIONA A OLT
+        // SELECIONA OLT
         // =================================================================
 
-        async function selecionarOlt(olt) {
-
+        async function selecionarOlt(
+            olt
+        ) {
             const oltNormalizada =
-                normalizarTexto(olt);
+                normalizarTexto(
+                    olt
+                );
 
 
             if (!oltNormalizada) {
@@ -331,10 +589,6 @@
                 );
             }
 
-
-            // -------------------------------------------------------------
-            // Localiza seletor
-            // -------------------------------------------------------------
 
             const seletor =
                 await esperarElemento(
@@ -350,31 +604,15 @@
             }
 
 
-            // -------------------------------------------------------------
-            // Já está selecionada
-            // -------------------------------------------------------------
-
             if (
                 normalizarTexto(
                     seletor.textContent
-                ) === oltNormalizada
+                ) ===
+                oltNormalizada
             ) {
-                console.log(
-                    '[RX AUTOMATION] OLT já selecionada:',
-                    olt
-                );
-
                 return;
             }
 
-
-            // -------------------------------------------------------------
-            // Abre dropdown
-            // -------------------------------------------------------------
-
-            console.log(
-                '[RX AUTOMATION] Abrindo seletor de OLT...'
-            );
 
             seletor.click();
 
@@ -383,16 +621,13 @@
                 seletor.parentElement;
 
 
-            // -------------------------------------------------------------
-            // Campo Buscar OLT
-            // -------------------------------------------------------------
-
             const campoBusca =
                 await esperarElemento(
                     () =>
-                        wrapper?.querySelector(
-                            'input[placeholder="Buscar OLT..."]'
-                        ),
+                        wrapper
+                            ?.querySelector(
+                                'input[placeholder="Buscar OLT..."]'
+                            ),
                     3000
                 );
 
@@ -404,11 +639,8 @@
             }
 
 
-            // -------------------------------------------------------------
-            // Pesquisa
-            // -------------------------------------------------------------
-
             campoBusca.focus();
+
 
             setNativeInputValue(
                 campoBusca,
@@ -416,50 +648,41 @@
             );
 
 
-            console.log(
-                '[RX AUTOMATION] Pesquisando OLT:',
-                olt
+            await sleep(
+                250
             );
 
 
-            await sleep(250);
-
-
-            // -------------------------------------------------------------
-            // ArrowDown
-            // -------------------------------------------------------------
-
-            campoBusca.dispatchEvent(
-                new KeyboardEvent(
+            for (
+                const eventType of
+                [
                     'keydown',
-                    {
-                        key: 'ArrowDown',
-                        code: 'ArrowDown',
-                        keyCode: 40,
-                        which: 40,
-                        bubbles: true
-                    }
-                )
-            );
+                    'keyup'
+                ]
+            ) {
+                campoBusca.dispatchEvent(
+                    new KeyboardEvent(
+                        eventType,
+                        {
+                            key:
+                                'ArrowDown',
 
+                            code:
+                                'ArrowDown',
 
-            campoBusca.dispatchEvent(
-                new KeyboardEvent(
-                    'keyup',
-                    {
-                        key: 'ArrowDown',
-                        code: 'ArrowDown',
-                        keyCode: 40,
-                        which: 40,
-                        bubbles: true
-                    }
-                )
-            );
+                            keyCode:
+                                40,
 
+                            which:
+                                40,
 
-            // -------------------------------------------------------------
-            // Localiza opção
-            // -------------------------------------------------------------
+                            bubbles:
+                                true
+                        }
+                    )
+                );
+            }
+
 
             const opcao =
                 await esperarElemento(
@@ -467,9 +690,12 @@
 
                         const opcoes =
                             Array.from(
-                                wrapper?.querySelectorAll(
-                                    'button[data-index]'
-                                ) || []
+                                wrapper
+                                    ?.querySelectorAll(
+                                        'button[data-index]'
+                                    )
+                                ||
+                                []
                             );
 
 
@@ -478,7 +704,8 @@
                                 btn =>
                                     normalizarTexto(
                                         btn.textContent
-                                    ) === oltNormalizada
+                                    ) ===
+                                    oltNormalizada
                             );
 
 
@@ -487,7 +714,10 @@
                         }
 
 
-                        if (opcoes.length === 1) {
+                        if (
+                            opcoes.length ===
+                            1
+                        ) {
                             return opcoes[0];
                         }
 
@@ -506,22 +736,8 @@
             }
 
 
-            console.log(
-                '[RX AUTOMATION] Opção localizada:',
-                opcao.textContent.trim()
-            );
-
-
-            // -------------------------------------------------------------
-            // Seleciona
-            // -------------------------------------------------------------
-
             opcao.click();
 
-
-            // -------------------------------------------------------------
-            // Confirma seleção
-            // -------------------------------------------------------------
 
             const selecionada =
                 await esperarElemento(
@@ -531,15 +747,18 @@
                             encontrarSeletorOlt();
 
 
-                        return (
+                        if (
                             seletorAtual &&
                             normalizarTexto(
                                 seletorAtual.textContent
-                            ) === oltNormalizada
-                        )
-                            ? seletorAtual
-                            : null;
+                            ) ===
+                            oltNormalizada
+                        ) {
+                            return seletorAtual;
+                        }
 
+
+                        return null;
                     },
                     3000,
                     100
@@ -551,90 +770,116 @@
                     `Falha ao confirmar a seleção da OLT: ${olt}`
                 );
             }
-
-
-            console.log(
-                '[RX AUTOMATION] OLT selecionada:',
-                olt
-            );
         }
 
 
         // =================================================================
-        // INPUT SERIAL
+        // SERIAL
         // =================================================================
 
         function encontrarInputSerial() {
-
             const inputs =
-                Array.from(
-                    document.querySelectorAll(
-                        'input'
+                Array
+                    .from(
+                        document.querySelectorAll(
+                            'input'
+                        )
                     )
-                )
-                .filter(
-                    input =>
-                        input.getAttribute(
-                            'placeholder'
-                        ) !== 'Buscar OLT...'
+                    .filter(
+                        input =>
+                            input.getAttribute(
+                                'placeholder'
+                            ) !==
+                            'Buscar OLT...'
+                    );
+
+
+            const identificado =
+                inputs.find(
+                    input => {
+
+                        const descricao =
+                            normalizarTexto(
+                                [
+                                    input.id,
+                                    input.name,
+                                    input.placeholder,
+                                    input.getAttribute(
+                                        'aria-label'
+                                    )
+                                ]
+                                    .filter(
+                                        Boolean
+                                    )
+                                    .join(
+                                        ' '
+                                    )
+                            );
+
+
+                        return descricao.includes(
+                            'SERIAL'
+                        );
+                    }
                 );
 
 
-            const porIdentificacao =
-                inputs.find(input => {
-
-                    const identificacao =
-                        normalizarTexto(
-                            [
-                                input.id,
-                                input.name,
-                                input.placeholder,
-                                input.getAttribute(
-                                    'aria-label'
-                                )
-                            ]
-                            .filter(Boolean)
-                            .join(' ')
-                        );
-
-
-                    return identificacao.includes(
-                        'SERIAL'
-                    );
-                });
-
-
-            if (porIdentificacao) {
-                return porIdentificacao;
-            }
-
-
             return (
+                identificado
+                ||
                 inputs.find(
                     input =>
-                        input.offsetParent !== null
-                ) ||
-                inputs[0] ||
+                        input.offsetParent !==
+                        null
+                )
+                ||
+                inputs[0]
+                ||
                 null
             );
         }
 
 
         // =================================================================
-        // RECEBE SOLICITAÇÃO DO ERP
+        // RECEBE REQUISIÇÃO
         // =================================================================
 
         GM_addValueChangeListener(
-            'visor_serial_request',
+            REQUEST_KEY,
 
-            async function(
+            async function (
                 name,
-                old_value,
-                data,
+                oldValue,
+                rawData,
                 remote
             ) {
 
-                if (!remote || !data) {
+                if (
+                    !remote ||
+                    !rawData
+                ) {
+                    return;
+                }
+
+
+                let data;
+
+
+                try {
+                    data =
+                        typeof rawData ===
+                        'string'
+                            ? JSON.parse(
+                                rawData
+                            )
+                            : rawData;
+                }
+                catch (error) {
+                    console.error(
+                        '[RX AUTOMATION] Requisição inválida:',
+                        error
+                    );
+
                     return;
                 }
 
@@ -642,26 +887,10 @@
                 const {
                     serial,
                     olt
-                } =
-                    typeof data === 'string'
-                        ? JSON.parse(data)
-                        : data;
-
-
-                console.log(
-                    '[RX AUTOMATION] Requisição recebida:',
-                    {
-                        serial,
-                        olt
-                    }
-                );
+                } = data;
 
 
                 try {
-
-                    // =====================================================
-                    // 1. MODO OLT
-                    // =====================================================
 
                     const oltButton =
                         await esperarElemento(
@@ -680,19 +909,15 @@
                     oltButton.click();
 
 
-                    await sleep(300);
+                    await sleep(
+                        300
+                    );
 
 
-                    // =====================================================
-                    // 2. SELECIONA OLT
-                    // =====================================================
+                    await selecionarOlt(
+                        olt
+                    );
 
-                    await selecionarOlt(olt);
-
-
-                    // =====================================================
-                    // 3. SERIAL
-                    // =====================================================
 
                     const serialInput =
                         await esperarElemento(
@@ -717,18 +942,10 @@
                     );
 
 
-                    console.log(
-                        '[RX AUTOMATION] Serial preenchido:',
-                        serial
+                    await sleep(
+                        300
                     );
 
-
-                    await sleep(300);
-
-
-                    // =====================================================
-                    // 4. CONSULTAR
-                    // =====================================================
 
                     const submitBtn =
                         await esperarElemento(
@@ -744,20 +961,12 @@
                     }
 
 
-                    submitBtn.disabled = false;
-
-
-                    console.log(
-                        '[RX AUTOMATION] Executando consulta via OLT...'
-                    );
+                    submitBtn.disabled =
+                        false;
 
 
                     submitBtn.click();
 
-
-                    // =====================================================
-                    // 5. AGUARDA RESULTADO
-                    // =====================================================
 
                     aguardarResultado(
                         serial,
@@ -765,20 +974,17 @@
                     );
 
                 }
-                catch (e) {
+                catch (error) {
 
                     console.error(
                         '[RX AUTOMATION] Erro:',
-                        e
+                        error
                     );
 
 
-                    GM_setValue(
-                        'visor_serial_result',
-                        `ERRO: ${
-                            e.message ||
-                            'Falha ao preencher Visor'
-                        }`
+                    enviarErro(
+                        error.message ||
+                        'Falha ao preencher Visor'
                     );
                 }
             }
@@ -786,7 +992,7 @@
 
 
         // =================================================================
-        // FALLBACK PARA CIDADE
+        // FALLBACK CIDADE
         // =================================================================
 
         async function tentarConsultaPorCidade(
@@ -795,13 +1001,10 @@
         ) {
 
             console.warn(
-                `[RX AUTOMATION] Iniciando fallback para Cidade. Motivo: ${motivo}`
+                '[RX AUTOMATION] Tentando consulta por Cidade:',
+                motivo
             );
 
-
-            // =============================================================
-            // 1. BOTÃO CIDADE
-            // =============================================================
 
             const cidadeButton =
                 await esperarElemento(
@@ -811,85 +1014,44 @@
 
 
             if (!cidadeButton) {
-
-                console.error(
-                    '[RX AUTOMATION] Botão Cidade não encontrado.'
-                );
-
-
-                GM_setValue(
-                    'visor_serial_result',
-                    'ERRO: Timeout (não carregou)'
+                enviarErro(
+                    'Timeout (não carregou)'
                 );
 
                 return;
             }
-
-
-            // =============================================================
-            // 2. MUDA PARA CIDADE
-            // =============================================================
-
-            console.log(
-                '[RX AUTOMATION] Mudando modo de consulta para Cidade...'
-            );
 
 
             cidadeButton.click();
 
 
-            /*
-             * Aguarda React reconstruir os elementos do formulário.
-             */
-            await sleep(500);
+            await sleep(
+                500
+            );
 
-
-            // =============================================================
-            // 3. PROCURA NOVAMENTE O BOTÃO CONSULTAR
-            // =============================================================
 
             const submitBtn =
                 await esperarElemento(
                     encontrarBotaoConsultar,
-                    3000,
-                    100
+                    3000
                 );
 
 
             if (!submitBtn) {
-
-                console.error(
-                    '[RX AUTOMATION] Botão Consultar não encontrado após selecionar Cidade.'
-                );
-
-
-                GM_setValue(
-                    'visor_serial_result',
-                    'ERRO: Timeout (não carregou)'
+                enviarErro(
+                    'Timeout (não carregou)'
                 );
 
                 return;
             }
 
 
-            // =============================================================
-            // 4. CONSULTA NOVAMENTE
-            // =============================================================
-
-            submitBtn.disabled = false;
-
-
-            console.log(
-                '[RX AUTOMATION] Executando nova consulta via Cidade...'
-            );
+            submitBtn.disabled =
+                false;
 
 
             submitBtn.click();
 
-
-            // =============================================================
-            // 5. AGUARDA SEGUNDA TENTATIVA
-            // =============================================================
 
             aguardarResultado(
                 targetSerial,
@@ -904,60 +1066,56 @@
 
         function aguardarResultado(
             targetSerial,
-            fallbackCidadeJaTentado = false
+            consultaPorCidade = false
         ) {
 
-            let tentativas = 0;
-
-            /*
-             * 40 x 500 ms = aproximadamente 20 segundos
-             */
-            const maxTentativas = 40;
+            let tentativas =
+                0;
 
 
-            console.log(
-                fallbackCidadeJaTentado
-                    ? '[RX AUTOMATION] Aguardando resultado da consulta via Cidade...'
-                    : '[RX AUTOMATION] Aguardando resultado da consulta via OLT...'
-            );
+            const maxTentativas =
+                40;
 
 
             const checkInterval =
-                setInterval(() => {
+                setInterval(
+                    () => {
 
-                    tentativas++;
-
-
-                    try {
-
-                        // =================================================
-                        // NOVO:
-                        // "ONT NÃO ENCONTRADA NESTA OLT"
-                        //
-                        // Se aparecer na primeira consulta, não precisa
-                        // esperar os 20 segundos do timeout.
-                        // =================================================
-
-                        if (!fallbackCidadeJaTentado) {
-
-                            const avisoNaoEncontrada =
-                                encontrarAvisoOntNaoEncontradaNaOlt();
+                        tentativas++;
 
 
-                            if (avisoNaoEncontrada) {
+                        try {
+
+                            const avisos =
+                                detectarAvisosOntNaoEncontrada();
+
+
+                            if (
+                                consultaPorCidade &&
+                                avisos.cidade
+                            ) {
 
                                 clearInterval(
                                     checkInterval
                                 );
 
 
-                                console.warn(
-                                    '[RX AUTOMATION] Visor informou: ONT não encontrada nesta OLT.'
+                                enviarErro(
+                                    'ONT não encontrada'
                                 );
 
 
-                                console.warn(
-                                    '[RX AUTOMATION] Indo imediatamente para consulta por Cidade.'
+                                return;
+                            }
+
+
+                            if (
+                                !consultaPorCidade &&
+                                avisos.olt
+                            ) {
+
+                                clearInterval(
+                                    checkInterval
                                 );
 
 
@@ -965,266 +1123,211 @@
                                     targetSerial,
                                     'ONT não encontrada nesta OLT'
                                 )
-                                .catch(error => {
+                                    .catch(
+                                        error => {
 
-                                    console.error(
-                                        '[RX AUTOMATION] Falha no fallback para Cidade:',
-                                        error
+                                            console.error(
+                                                error
+                                            );
+
+
+                                            enviarErro(
+                                                'Timeout (não carregou)'
+                                            );
+                                        }
                                     );
-
-
-                                    GM_setValue(
-                                        'visor_serial_result',
-                                        'ERRO: Timeout (não carregou)'
-                                    );
-
-                                });
 
 
                                 return;
                             }
-                        }
 
 
-                        // =================================================
-                        // PROCURA RESULTADO RX
-                        // =================================================
-
-                        const spans =
-                            Array.from(
-                                document.querySelectorAll(
-                                    'span'
-                                )
-                            );
-
-
-                        const rxLabel =
-                            spans.find(
-                                span =>
-                                    normalizarTexto(
-                                        span.textContent
-                                    ) ===
-                                    'POTÊNCIA RX'
-                            );
-
-
-                        if (rxLabel) {
-
-                            const resultCard =
-                                rxLabel.closest(
-                                    '.result-pop'
-                                ) ||
-                                rxLabel.closest(
-                                    'main'
-                                ) ||
-                                document.body;
-
-
-                            const cardText =
-                                normalizarTexto(
-                                    resultCard.textContent
-                                );
-
-
-                            if (
-                                cardText.includes(
-                                    normalizarTexto(
-                                        targetSerial
+                            const rxLabel =
+                                Array
+                                    .from(
+                                        document.querySelectorAll(
+                                            'span'
+                                        )
                                     )
-                                )
-                            ) {
+                                    .find(
+                                        span =>
+                                            normalizarTexto(
+                                                span.textContent
+                                            ) ===
+                                            'POTÊNCIA RX'
+                                    );
 
-                                const rxContainer =
-                                    rxLabel
-                                        .parentElement
-                                        .querySelector(
-                                            '.text-2xl'
+
+                            if (rxLabel) {
+
+                                const resultCard =
+                                    rxLabel.closest(
+                                        '.result-pop'
+                                    )
+                                    ||
+                                    rxLabel.closest(
+                                        'main'
+                                    )
+                                    ||
+                                    document.body;
+
+
+                                const cardText =
+                                    normalizarTexto(
+                                        resultCard.textContent
+                                    );
+
+
+                                if (
+                                    cardText.includes(
+                                        normalizarTexto(
+                                            targetSerial
+                                        )
+                                    )
+                                ) {
+
+                                    const rxContainer =
+                                        rxLabel
+                                            .parentElement
+                                            ?.querySelector(
+                                                '.text-2xl'
+                                            );
+
+
+                                    if (rxContainer) {
+
+                                        clearInterval(
+                                            checkInterval
                                         );
 
 
-                                if (rxContainer) {
+                                        setTimeout(
+                                            () => {
 
-                                    clearInterval(
-                                        checkInterval
-                                    );
+                                                const spanAtualizado =
+                                                    Array
+                                                        .from(
+                                                            document.querySelectorAll(
+                                                                'span'
+                                                            )
+                                                        )
+                                                        .find(
+                                                            span =>
+                                                                normalizarTexto(
+                                                                    span.textContent
+                                                                ) ===
+                                                                'POTÊNCIA RX'
+                                                        );
 
 
-                                    console.log(
-                                        '[RX AUTOMATION] Resultado detectado. Aguardando estabilização...'
-                                    );
+                                                const containerAtualizado =
+                                                    spanAtualizado
+                                                        ?.parentElement
+                                                        ?.querySelector(
+                                                            '.text-2xl'
+                                                        );
 
 
-                                    setTimeout(() => {
+                                                const rxValue =
+                                                    containerAtualizado
+                                                        ?.textContent
+                                                        ?.trim()
+                                                    ||
+                                                    '';
 
-                                        const spanAtualizado =
-                                            Array
-                                                .from(
-                                                    document.querySelectorAll(
-                                                        'span'
-                                                    )
-                                                )
-                                                .find(
-                                                    s =>
-                                                        normalizarTexto(
-                                                            s.textContent
-                                                        ) ===
-                                                        'POTÊNCIA RX'
+
+                                                if (!rxValue) {
+
+                                                    enviarErro(
+                                                        'Valor RX em branco'
+                                                    );
+
+                                                    return;
+                                                }
+
+
+                                                enviarResultado(
+                                                    rxValue,
+                                                    consultaPorCidade
                                                 );
 
-
-                                        const containerAtualizado =
-                                            spanAtualizado
-                                                ? spanAtualizado
-                                                    .parentElement
-                                                    .querySelector(
-                                                        '.text-2xl'
-                                                    )
-                                                : null;
+                                            },
+                                            1000
+                                        );
 
 
-                                        const rxValue =
-                                            containerAtualizado
-                                                ? containerAtualizado
-                                                    .textContent
-                                                    .trim()
-                                                : '';
-
-
-                                        if (rxValue) {
-
-                                            console.log(
-                                                '[RX AUTOMATION] Potência RX capturada:',
-                                                rxValue
-                                            );
-
-
-                                            GM_setValue(
-                                                'visor_serial_result',
-                                                rxValue
-                                            );
-
-                                        }
-                                        else {
-
-                                            GM_setValue(
-                                                'visor_serial_result',
-                                                'ERRO: Valor RX em branco'
-                                            );
-                                        }
-
-                                    }, 1000);
-
-
-                                    return;
+                                        return;
+                                    }
                                 }
                             }
+
                         }
+                        catch (error) {
 
-                    }
-                    catch (e) {
-
-                        clearInterval(
-                            checkInterval
-                        );
-
-
-                        console.error(
-                            '[RX AUTOMATION] Erro durante leitura do resultado:',
-                            e
-                        );
-
-
-                        GM_setValue(
-                            'visor_serial_result',
-                            'ERRO: Falha na leitura'
-                        );
-
-
-                        return;
-                    }
-
-
-                    // =====================================================
-                    // TIMEOUT
-                    // =====================================================
-
-                    if (
-                        tentativas >=
-                        maxTentativas
-                    ) {
-
-                        clearInterval(
-                            checkInterval
-                        );
-
-
-                        // =================================================
-                        // PRIMEIRO TIMEOUT
-                        //
-                        // Ainda estava consultando pela OLT.
-                        // Executa fallback por Cidade.
-                        // =================================================
-
-                        if (!fallbackCidadeJaTentado) {
-
-                            console.warn(
-                                '[RX AUTOMATION] Timeout na consulta via OLT.'
+                            clearInterval(
+                                checkInterval
                             );
 
 
-                            console.warn(
-                                '[RX AUTOMATION] Tentando consulta por Cidade...'
+                            console.error(
+                                error
                             );
 
 
-                            tentarConsultaPorCidade(
-                                targetSerial,
-                                'Timeout da consulta via OLT'
-                            )
-                            .catch(error => {
-
-                                console.error(
-                                    '[RX AUTOMATION] Falha no fallback para Cidade:',
-                                    error
-                                );
-
-
-                                GM_setValue(
-                                    'visor_serial_result',
-                                    'ERRO: Timeout (não carregou)'
-                                );
-
-                            });
+                            enviarErro(
+                                'Falha na leitura'
+                            );
 
 
                             return;
                         }
 
 
-                        // =================================================
-                        // SEGUNDO TIMEOUT
-                        //
-                        // Cidade já foi tentada.
-                        // Agora encerra definitivamente.
-                        // =================================================
+                        if (
+                            tentativas >=
+                            maxTentativas
+                        ) {
 
-                        console.error(
-                            '[RX AUTOMATION] Timeout também na consulta via Cidade.'
-                        );
+                            clearInterval(
+                                checkInterval
+                            );
 
 
-                        console.error(
-                            '[RX AUTOMATION] Encerrando tentativa.'
-                        );
+                            if (
+                                !consultaPorCidade
+                            ) {
+
+                                tentarConsultaPorCidade(
+                                    targetSerial,
+                                    'Timeout da consulta por OLT'
+                                )
+                                    .catch(
+                                        error => {
+
+                                            console.error(
+                                                error
+                                            );
 
 
-                        GM_setValue(
-                            'visor_serial_result',
-                            'ERRO: Timeout (não carregou)'
-                        );
-                    }
+                                            enviarErro(
+                                                'Timeout (não carregou)'
+                                            );
+                                        }
+                                    );
 
-                }, 500);
+
+                                return;
+                            }
+
+
+                            enviarErro(
+                                'Timeout (não carregou)'
+                            );
+                        }
+
+                    },
+                    500
+                );
         }
 
 
@@ -1233,11 +1336,15 @@
 
 
     // =====================================================================
-    // ERP OSIR
+    // ERP
     // =====================================================================
 
     const BUTTON_ID =
-        'tm-visor-rx-button';
+        'tm-visor-rx-button-v26';
+
+
+    const COPY_BUTTON_ID =
+        'tm-visor-rx-copy-button-v26';
 
 
     const EYE_ICON_SVG = `
@@ -1258,11 +1365,123 @@
     `;
 
 
+    const COPY_ICON_SVG = `
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <rect
+                width="14"
+                height="14"
+                x="8"
+                y="8"
+                rx="2"
+                ry="2"
+            />
+            <path
+                d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+            />
+        </svg>
+    `;
+
+
     // =====================================================================
-    // ESTADO PADRÃO DO BOTÃO
+    // CONTROLE DOS AVISOS
     // =====================================================================
 
-    function setButtonDefaultState(btn) {
+    function cancelarTimerAviso(
+        btn
+    ) {
+
+        if (
+            btn._rxNoticeTimer
+        ) {
+
+            clearTimeout(
+                btn._rxNoticeTimer
+            );
+
+
+            btn._rxNoticeTimer =
+                null;
+        }
+    }
+
+
+    function limparEstadoAviso(
+        btn
+    ) {
+
+        cancelarTimerAviso(
+            btn
+        );
+
+
+        delete btn.dataset.noticeActive;
+        delete btn.dataset.noticeType;
+        delete btn.dataset.differentOlt;
+    }
+
+
+    function iniciarTimerAviso(
+        btn
+    ) {
+
+        cancelarTimerAviso(
+            btn
+        );
+
+
+        btn._rxNoticeTimer =
+            setTimeout(
+                () => {
+
+                    if (
+                        !btn.isConnected ||
+                        btn.dataset.loading
+                    ) {
+                        return;
+                    }
+
+
+                    if (
+                        btn.dataset.noticeActive ===
+                        'true'
+                    ) {
+
+                        setButtonDefaultState(
+                            btn
+                        );
+                    }
+
+                },
+                NOTICE_DURATION
+            );
+    }
+
+
+    // =====================================================================
+    // ESTADOS
+    // =====================================================================
+
+    function setButtonDefaultState(
+        btn
+    ) {
+
+        limparEstadoAviso(
+            btn
+        );
+
+
+        delete btn.dataset.loading;
+
 
         btn.innerHTML =
             EYE_ICON_SVG;
@@ -1274,6 +1493,331 @@
 
         btn.style.color =
             '#000000';
+
+
+        btn.title =
+            'Consultar Potência RX no Visor OSIR';
+    }
+
+
+    function setButtonDifferentOltState(
+        btn
+    ) {
+
+        limparEstadoAviso(
+            btn
+        );
+
+
+        delete btn.dataset.loading;
+
+
+        btn.dataset.noticeActive =
+            'true';
+
+
+        btn.dataset.noticeType =
+            'different-olt';
+
+
+        btn.dataset.differentOlt =
+            'true';
+
+
+        btn.innerHTML =
+            '<span>Encontrado em OLT diferente</span>';
+
+
+        btn.style.backgroundColor =
+            '#f59e0b';
+
+
+        btn.style.color =
+            '#111827';
+
+
+        btn.title =
+            'A ONT foi encontrada em uma OLT diferente.';
+
+
+        iniciarTimerAviso(
+            btn
+        );
+    }
+
+
+    function setButtonErrorState(
+        btn,
+        mensagem
+    ) {
+
+        limparEstadoAviso(
+            btn
+        );
+
+
+        delete btn.dataset.loading;
+
+
+        btn.dataset.noticeActive =
+            'true';
+
+
+        btn.dataset.noticeType =
+            'error';
+
+
+        btn.innerHTML =
+            `<span>${mensagem}</span>`;
+
+
+        btn.style.backgroundColor =
+            '#ef4444';
+
+
+        btn.style.color =
+            '#ffffff';
+
+
+        btn.title =
+            mensagem;
+
+
+        iniciarTimerAviso(
+            btn
+        );
+    }
+
+
+    // =====================================================================
+    // CÓPIA MANUAL
+    // =====================================================================
+
+    async function copiarTextoManual(
+        texto
+    ) {
+
+        if (!texto) {
+            return false;
+        }
+
+
+        if (
+            navigator.clipboard &&
+            typeof navigator.clipboard.writeText ===
+            'function'
+        ) {
+
+            await navigator.clipboard.writeText(
+                texto
+            );
+
+
+            return true;
+        }
+
+
+        const textarea =
+            document.createElement(
+                'textarea'
+            );
+
+
+        textarea.value =
+            texto;
+
+
+        textarea.style.position =
+            'fixed';
+
+
+        textarea.style.opacity =
+            '0';
+
+
+        textarea.style.pointerEvents =
+            'none';
+
+
+        document.body.appendChild(
+            textarea
+        );
+
+
+        textarea.focus();
+
+        textarea.select();
+
+
+        const sucesso =
+            document.execCommand(
+                'copy'
+            );
+
+
+        textarea.remove();
+
+
+        return sucesso;
+    }
+
+
+    // =====================================================================
+    // BOTÃO COPIAR
+    // =====================================================================
+
+    function removerBotaoCopiar() {
+
+        const btn =
+            document.getElementById(
+                COPY_BUTTON_ID
+            );
+
+
+        if (btn) {
+            btn.remove();
+        }
+    }
+
+
+    function criarOuAtualizarBotaoCopiar(
+        searchBtn,
+        rxValue
+    ) {
+
+        let copyBtn =
+            document.getElementById(
+                COPY_BUTTON_ID
+            );
+
+
+        if (!copyBtn) {
+
+            copyBtn =
+                document.createElement(
+                    'button'
+                );
+
+
+            copyBtn.id =
+                COPY_BUTTON_ID;
+
+
+            copyBtn.type =
+                'button';
+
+
+            copyBtn.style.cssText = `
+                margin-left: 8px;
+                padding: 5px 12px;
+                border: 1px solid #1d4ed8;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                font-family: inherit;
+                height: 40px;
+                align-self: center;
+                transition: all 0.2s ease-in-out;
+                white-space: nowrap;
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                box-shadow: 0 2px 4px rgba(0,0,0,.15);
+                background-color: #3b82f6;
+                color: #ffffff;
+            `;
+
+
+            searchBtn.insertAdjacentElement(
+                'afterend',
+                copyBtn
+            );
+        }
+
+
+        copyBtn.dataset.rxValue =
+            rxValue;
+
+
+        copyBtn.title =
+            'Copiar potência RX';
+
+
+        copyBtn.innerHTML =
+            `${COPY_ICON_SVG}<span>${rxValue}</span>`;
+
+
+        copyBtn.onclick =
+            async () => {
+
+                const valor =
+                    copyBtn.dataset.rxValue
+                    ||
+                    '';
+
+
+                if (!valor) {
+                    return;
+                }
+
+
+                try {
+
+                    await copiarTextoManual(
+                        valor
+                    );
+
+
+                    copyBtn.innerHTML =
+                        `${COPY_ICON_SVG}<span>Copiado!</span>`;
+
+
+                    setTimeout(
+                        () => {
+
+                            if (
+                                copyBtn.isConnected
+                            ) {
+
+                                copyBtn.innerHTML =
+                                    `${COPY_ICON_SVG}<span>${valor}</span>`;
+                            }
+
+                        },
+                        1200
+                    );
+
+                }
+                catch (error) {
+
+                    console.error(
+                        '[RX AUTOMATION] Falha ao copiar:',
+                        error
+                    );
+
+
+                    copyBtn.innerHTML =
+                        `${COPY_ICON_SVG}<span>Erro ao copiar</span>`;
+
+
+                    setTimeout(
+                        () => {
+
+                            if (
+                                copyBtn.isConnected
+                            ) {
+
+                                copyBtn.innerHTML =
+                                    `${COPY_ICON_SVG}<span>${valor}</span>`;
+                            }
+
+                        },
+                        1500
+                    );
+                }
+            };
     }
 
 
@@ -1331,10 +1875,6 @@
             'button';
 
 
-        btn.title =
-            'Consultar Potência RX no Visor OSIR';
-
-
         btn.style.cssText = `
             margin-left: 10px;
             padding: 5px 12px;
@@ -1352,7 +1892,7 @@
             align-items: center;
             justify-content: center;
             gap: 6px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 2px 4px rgba(0,0,0,.15);
         `;
 
 
@@ -1365,9 +1905,23 @@
         // HOVER
         // =================================================================
 
-        btn.onmouseover = () => {
+        btn.onmouseover =
+            () => {
 
-            if (!btn.dataset.loading) {
+                if (
+                    btn.dataset.loading
+                ) {
+                    return;
+                }
+
+
+                if (
+                    btn.dataset.noticeActive ===
+                    'true'
+                ) {
+                    return;
+                }
+
 
                 btn.style.backgroundColor =
                     '#16a34a';
@@ -1375,48 +1929,76 @@
 
                 btn.style.color =
                     '#000000';
-            }
-        };
+            };
 
 
-        btn.onmouseout = () => {
+        btn.onmouseout =
+            () => {
 
-            if (!btn.dataset.loading) {
+                if (
+                    btn.dataset.loading
+                ) {
+                    return;
+                }
+
+
+                if (
+                    btn.dataset.noticeActive ===
+                    'true'
+                ) {
+                    return;
+                }
+
 
                 setButtonDefaultState(
                     btn
                 );
-            }
-        };
+            };
 
 
         // =================================================================
-        // CLIQUE
+        // NOVA CONSULTA
         // =================================================================
 
         btn.addEventListener(
             'click',
+
             () => {
+
+                if (
+                    btn.dataset.loading
+                ) {
+                    return;
+                }
+
+
+                limparEstadoAviso(
+                    btn
+                );
+
 
                 const serialValue =
                     inputEl.value
-                        ? inputEl.value.trim()
-                        : '';
+                        ?.trim()
+                    ||
+                    '';
 
 
                 if (!serialValue) {
+
+                    setButtonDefaultState(
+                        btn
+                    );
+
 
                     alert(
                         'O campo do serial está vazio!'
                     );
 
+
                     return;
                 }
 
-
-                // =========================================================
-                // CAPTURA OLT
-                // =========================================================
 
                 const oltEl =
                     document.querySelector(
@@ -1442,7 +2024,7 @@
 
 
                 console.log(
-                    '[RX AUTOMATION] OLT original:',
+                    '[RX AUTOMATION] Access Point:',
                     rawOlt
                 );
 
@@ -1453,19 +2035,15 @@
                 );
 
 
-                // =========================================================
-                // LOADING
-                // =========================================================
+                removerBotaoCopiar();
+
 
                 btn.dataset.loading =
                     'true';
 
 
                 btn.innerHTML =
-                    `<span style="
-                        font-size: 18px;
-                        letter-spacing: 2px;
-                    ">...</span>`;
+                    '<span style="font-size:18px;letter-spacing:2px;">...</span>';
 
 
                 btn.style.backgroundColor =
@@ -1476,26 +2054,21 @@
                     '#000000';
 
 
-                // =========================================================
-                // PAYLOAD
-                // =========================================================
-
                 const payload =
                     JSON.stringify({
                         serial:
                             serialValue,
 
                         olt:
-                            oltTraduzida
+                            oltTraduzida,
+
+                        timestamp:
+                            Date.now()
                     });
 
 
-                // =========================================================
-                // ENVIA PARA O VISOR
-                // =========================================================
-
                 GM_setValue(
-                    'visor_serial_request',
+                    REQUEST_KEY,
                     ''
                 );
 
@@ -1504,7 +2077,7 @@
                     () => {
 
                         GM_setValue(
-                            'visor_serial_request',
+                            REQUEST_KEY,
                             payload
                         );
 
@@ -1535,22 +2108,27 @@
 
 
     // =====================================================================
-    // OBSERVER DA SPA
+    // OBSERVER
     // =====================================================================
 
     const observer =
-        new MutationObserver(() => {
+        new MutationObserver(
+            () => {
 
-            injetarBotaoSeNecessario();
+                injetarBotaoSeNecessario();
 
-        });
+            }
+        );
 
 
     observer.observe(
         document.body,
         {
-            childList: true,
-            subtree: true
+            childList:
+                true,
+
+            subtree:
+                true
         }
     );
 
@@ -1559,130 +2137,155 @@
 
 
     // =====================================================================
-    // RECEBE RESULTADO DO VISOR
+    // RESULTADO
     // =====================================================================
 
     GM_addValueChangeListener(
-        'visor_serial_result',
+        RESULT_KEY,
 
-        function(
+        function (
             name,
-            old_value,
-            rx_value,
+            oldValue,
+            rawResult,
             remote
         ) {
 
             if (
-                remote &&
-                rx_value
+                !remote ||
+                !rawResult
+            ) {
+                return;
+            }
+
+
+            const btn =
+                document.getElementById(
+                    BUTTON_ID
+                );
+
+
+            if (!btn) {
+                return;
+            }
+
+
+            let resultado;
+
+
+            try {
+
+                resultado =
+                    JSON.parse(
+                        rawResult
+                    );
+
+            }
+            catch (error) {
+
+                console.error(
+                    '[RX AUTOMATION] Resultado inválido:',
+                    error
+                );
+
+
+                return;
+            }
+
+
+            delete btn.dataset.loading;
+
+
+            // =================================================================
+            // ERRO
+            // =================================================================
+
+            if (
+                resultado.tipo ===
+                'erro'
             ) {
 
-                const btn =
-                    document.getElementById(
-                        BUTTON_ID
+                removerBotaoCopiar();
+
+
+                setButtonErrorState(
+                    btn,
+                    resultado.mensagem
+                    ||
+                    'ERRO: Falha na consulta'
+                );
+
+
+                return;
+            }
+
+
+            // =================================================================
+            // SUCESSO
+            // =================================================================
+
+            if (
+                resultado.tipo ===
+                'sucesso'
+            ) {
+
+                const rxValue =
+                    String(
+                        resultado.rx ??
+                        ''
+                    )
+                        .trim();
+
+
+                if (!rxValue) {
+
+                    removerBotaoCopiar();
+
+
+                    setButtonErrorState(
+                        btn,
+                        'ERRO: Valor RX em branco'
                     );
 
 
-                // =========================================================
-                // COPIA RX
-                // =========================================================
+                    return;
+                }
+
+
+                criarOuAtualizarBotaoCopiar(
+                    btn,
+                    rxValue
+                );
+
 
                 if (
-                    !rx_value.includes(
-                        'ERRO'
-                    )
+                    resultado.oltDiferente ===
+                    true
                 ) {
 
-                    GM_setClipboard(
-                        rx_value
+                    setButtonDifferentOltState(
+                        btn
                     );
                 }
+                else {
 
-
-                // =========================================================
-                // ATUALIZA BOTÃO
-                // =========================================================
-
-                if (btn) {
-
-                    delete btn.dataset.loading;
-
-
-                    if (
-                        rx_value.includes(
-                            'ERRO'
-                        )
-                    ) {
-
-                        btn.innerHTML =
-                            `<span>${rx_value}</span>`;
-
-
-                        btn.style.backgroundColor =
-                            '#ef4444';
-
-
-                        btn.style.color =
-                            '#ffffff';
-
-                    }
-                    else {
-
-                        btn.innerHTML =
-                            `${EYE_ICON_SVG}
-                             <span>
-                                 ${rx_value}
-                             </span>`;
-
-
-                        btn.style.backgroundColor =
-                            '#3b82f6';
-
-
-                        btn.style.color =
-                            '#ffffff';
-                    }
-
-
-                    // =====================================================
-                    // RESTAURA BOTÃO EM 5 SEGUNDOS
-                    // =====================================================
-
-                    setTimeout(
-                        () => {
-
-                            if (
-                                btn &&
-                                !btn.dataset.loading
-                            ) {
-
-                                setButtonDefaultState(
-                                    btn
-                                );
-                            }
-
-                        },
-                        5000
+                    setButtonDefaultState(
+                        btn
                     );
                 }
-
-
-                // =========================================================
-                // LIMPA RESULTADO COMPARTILHADO
-                // =========================================================
-
-                setTimeout(
-                    () => {
-
-                        GM_setValue(
-                            'visor_serial_result',
-                            ''
-                        );
-
-                    },
-                    200
-                );
             }
+
+
+            setTimeout(
+                () => {
+
+                    GM_setValue(
+                        RESULT_KEY,
+                        ''
+                    );
+
+                },
+                200
+            );
         }
     );
 
