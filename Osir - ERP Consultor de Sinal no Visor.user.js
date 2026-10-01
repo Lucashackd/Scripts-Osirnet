@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - ERP Consultor de Sinal no Visor
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      2.7
+// @version      2.8
 // @description  Consulta a potência RX no Visor OSIR e permite copiar manualmente o resultado
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/legacy/operations/**
@@ -20,20 +20,13 @@
 (function () {
     'use strict';
 
-
     // =====================================================================
     // CONFIGURAÇÕES
     // =====================================================================
 
-    const REQUEST_KEY =
-        'osir_visor_rx_request_v26';
-
-    const RESULT_KEY =
-        'osir_visor_rx_result_v26';
-
-    const NOTICE_DURATION =
-        15000;
-
+    const REQUEST_KEY = 'osir_visor_rx_request_v26';
+    const RESULT_KEY = 'osir_visor_rx_result_v26';
+    const NOTICE_DURATION = 15000;
 
     // =====================================================================
     // MAPA DE OLTs
@@ -63,134 +56,79 @@
         'FENADOCE CLIENTES': 'OLT Fenadoce'
     };
 
-
     // =====================================================================
     // TRADUÇÃO DA OLT
     // =====================================================================
 
     function traduzirAccessPoint(rawText) {
-        if (!rawText) {
+
+        if (!rawText || !String(rawText).trim()) {
             return '';
         }
 
-        let cleaned =
-            rawText.trim();
+        let cleaned = String(rawText).trim();
 
+        // Remove "Fibra" do início
+        cleaned = cleaned.replace(
+            /^Fibra\s+/i,
+            ''
+        );
 
-        // =================================================================
-        // REMOVE "FIBRA" DO INÍCIO
+        // Remove sufixos auxiliares.
         //
-        // Ex:
-        // Fibra CSS1 Dedicados
-        // -> CSS1 Dedicados
-        // =================================================================
-
-        cleaned =
-            cleaned.replace(
-                /^Fibra\s+/i,
-                ''
-            );
-
-
-        // =================================================================
-        // REMOVE SUFIXOS AUXILIARES
-        //
-        // Os sufixos podem eventualmente aparecer em ordens diferentes.
-        //
-        // Exemplos aceitos:
-        //
+        // Exemplos:
         // CSS1 Dedicados
-        //
         // CSS1 Dedicados Slot 1 Porta 2
-        //
         // CSS1 Slot 1 Porta 2 Dedicados
         //
-        // Todos resultam em:
-        //
-        // CSS1
-        // =================================================================
+        // Todos resultam em CSS1.
 
         let valorAnterior;
 
-
         do {
+            valorAnterior = cleaned;
 
-            valorAnterior =
-                cleaned;
+            cleaned = cleaned.replace(
+                /\s+Dedicados$/i,
+                ''
+            );
 
+            cleaned = cleaned.replace(
+                /\s+Slot\s+\d+\s+Porta\s+\d+$/i,
+                ''
+            );
 
-            // -------------------------------------------------------------
-            // REMOVE "DEDICADOS" DO FINAL
-            // -------------------------------------------------------------
+            cleaned = cleaned.trim();
 
-            cleaned =
-                cleaned.replace(
-                    /\s+Dedicados$/i,
-                    ''
-                );
+        } while (cleaned !== valorAnterior);
 
-
-            // -------------------------------------------------------------
-            // REMOVE "SLOT XX PORTA XX" DO FINAL
-            // -------------------------------------------------------------
-
-            cleaned =
-                cleaned.replace(
-                    /\s+Slot\s+\d+\s+Porta\s+\d+$/i,
-                    ''
-                );
-
-
-            cleaned =
-                cleaned.trim();
-
-
-        }
-        while (
-            cleaned !==
-            valorAnterior
-        );
-
-
-        // =================================================================
-        // MAPEAMENTOS ESPECIAIS
-        // =================================================================
-
-        if (
-            MAPA_OLT[cleaned]
-        ) {
-
-            return MAPA_OLT[
-                cleaned
-            ];
+        // Caso a limpeza resulte em vazio
+        if (!cleaned) {
+            return '';
         }
 
+        // Mapeamentos especiais
+        if (MAPA_OLT[cleaned]) {
+            return MAPA_OLT[cleaned];
+        }
 
-        // =================================================================
-        // REGRA PADRÃO
-        // =================================================================
-
+        // Regra padrão
         if (
             !cleaned.startsWith('OLT ') &&
             !cleaned.startsWith('OTL ')
         ) {
-
             return `OLT ${cleaned}`;
         }
 
-
         return cleaned;
     }
-
 
     // =====================================================================
     // INPUT REACT
     // =====================================================================
 
-    function setNativeInputValue(
-        input,
-        value
-    ) {
+    function setNativeInputValue(input, value) {
+
         const nativeSetter =
             Object
                 .getOwnPropertyDescriptor(
@@ -199,12 +137,10 @@
                 )
                 .set;
 
-
         nativeSetter.call(
             input,
             value
         );
-
 
         input.dispatchEvent(
             new Event(
@@ -214,7 +150,6 @@
                 }
             )
         );
-
 
         input.dispatchEvent(
             new Event(
@@ -226,7 +161,6 @@
         );
     }
 
-
     // =====================================================================
     // VISOR
     // =====================================================================
@@ -237,9 +171,8 @@
     ) {
 
         console.log(
-            '[RX AUTOMATION 2.7] Visor detectado.'
+            '[RX AUTOMATION 2.8] Visor detectado.'
         );
-
 
         const sleep =
             (ms) =>
@@ -251,8 +184,8 @@
                         )
                 );
 
-
         function normalizarTexto(texto) {
+
             return String(
                 texto || ''
             )
@@ -264,15 +197,17 @@
                 .toUpperCase();
         }
 
+        // =================================================================
+        // ESPERA ELEMENTO
+        // =================================================================
 
         async function esperarElemento(
             getElement,
             timeout = 5000,
             intervalo = 100
         ) {
-            const inicio =
-                Date.now();
 
+            const inicio = Date.now();
 
             while (
                 Date.now() - inicio <
@@ -282,21 +217,17 @@
                 const elemento =
                     getElement();
 
-
                 if (elemento) {
                     return elemento;
                 }
-
 
                 await sleep(
                     intervalo
                 );
             }
 
-
             return null;
         }
-
 
         // =================================================================
         // RESULTADOS
@@ -306,22 +237,15 @@
             rx,
             oltDiferente
         ) {
+
             const resultado = {
-                tipo:
-                    'sucesso',
-
-                rx:
-                    rx,
-
-                oltDiferente:
-                    Boolean(
-                        oltDiferente
-                    ),
-
-                timestamp:
-                    Date.now()
+                tipo: 'sucesso',
+                rx: rx,
+                oltDiferente: Boolean(
+                    oltDiferente
+                ),
+                timestamp: Date.now()
             };
-
 
             GM_setValue(
                 RESULT_KEY,
@@ -330,22 +254,16 @@
                 )
             );
         }
-
 
         function enviarErro(
             mensagem
         ) {
+
             const resultado = {
-                tipo:
-                    'erro',
-
-                mensagem:
-                    `ERRO: ${mensagem}`,
-
-                timestamp:
-                    Date.now()
+                tipo: 'erro',
+                mensagem: `ERRO: ${mensagem}`,
+                timestamp: Date.now()
             };
-
 
             GM_setValue(
                 RESULT_KEY,
@@ -354,28 +272,26 @@
                 )
             );
         }
-
 
         // =================================================================
         // MODO OLT / CIDADE
         // =================================================================
 
         function encontrarContainerModoConsulta() {
+
             return document.querySelector(
                 'div.relative.grid.grid-cols-2'
             );
         }
 
-
         function encontrarBotaoModoOlt() {
+
             const container =
                 encontrarContainerModoConsulta();
-
 
             if (!container) {
                 return null;
             }
-
 
             const botoes =
                 Array.from(
@@ -383,7 +299,6 @@
                         'button[type="button"]'
                     )
                 );
-
 
             return (
                 botoes.find(
@@ -400,16 +315,14 @@
             );
         }
 
-
         function encontrarBotaoModoCidade() {
+
             const container =
                 encontrarContainerModoConsulta();
-
 
             if (!container) {
                 return null;
             }
-
 
             const botoes =
                 Array.from(
@@ -417,7 +330,6 @@
                         'button[type="button"]'
                     )
                 );
-
 
             return (
                 botoes.find(
@@ -434,19 +346,18 @@
             );
         }
 
-
         // =================================================================
         // BOTÃO CONSULTAR
         // =================================================================
 
         function encontrarBotaoConsultar() {
+
             const botoes =
                 Array.from(
                     document.querySelectorAll(
                         'button[type="submit"]'
                     )
                 );
-
 
             return (
                 botoes.find(
@@ -461,19 +372,14 @@
             );
         }
 
-
         // =================================================================
-        // DETECÇÃO DOS AVISOS
+        // AVISOS DO VISOR
         // =================================================================
 
         function detectarAvisosOntNaoEncontrada() {
 
-            let avisoOlt =
-                null;
-
-            let avisoCidade =
-                null;
-
+            let avisoOlt = null;
+            let avisoCidade = null;
 
             const divs =
                 Array.from(
@@ -481,7 +387,6 @@
                         'div'
                     )
                 );
-
 
             for (
                 const div of divs
@@ -492,50 +397,41 @@
                         div.textContent
                     );
 
-
                 if (
                     texto.includes(
                         'ONT NÃO ENCONTRADA EM NENHUMA OLT'
                     )
                 ) {
-                    avisoCidade =
-                        div;
+                    avisoCidade = div;
                 }
-
 
                 if (
                     texto.includes(
                         'ONT NÃO ENCONTRADA NESTA OLT'
                     )
                 ) {
-                    avisoOlt =
-                        div;
+                    avisoOlt = div;
                 }
             }
 
-
             return {
-                olt:
-                    avisoOlt,
-
-                cidade:
-                    avisoCidade
+                olt: avisoOlt,
+                cidade: avisoCidade
             };
         }
-
 
         // =================================================================
         // SELETOR OLT
         // =================================================================
 
         function encontrarSeletorOlt() {
+
             const candidatos =
                 Array.from(
                     document.querySelectorAll(
                         'div.fade-swap > div.relative > button[type="button"]'
                     )
                 );
-
 
             return (
                 candidatos.find(
@@ -545,7 +441,6 @@
                             normalizarTexto(
                                 btn.textContent
                             );
-
 
                         return (
                             texto ===
@@ -569,7 +464,6 @@
             );
         }
 
-
         // =================================================================
         // SELECIONA OLT
         // =================================================================
@@ -577,11 +471,11 @@
         async function selecionarOlt(
             olt
         ) {
+
             const oltNormalizada =
                 normalizarTexto(
                     olt
                 );
-
 
             if (!oltNormalizada) {
                 throw new Error(
@@ -589,20 +483,17 @@
                 );
             }
 
-
             const seletor =
                 await esperarElemento(
                     encontrarSeletorOlt,
                     5000
                 );
 
-
             if (!seletor) {
                 throw new Error(
                     'Seletor de OLT não encontrado'
                 );
             }
-
 
             if (
                 normalizarTexto(
@@ -613,13 +504,10 @@
                 return;
             }
 
-
             seletor.click();
-
 
             const wrapper =
                 seletor.parentElement;
-
 
             const campoBusca =
                 await esperarElemento(
@@ -631,27 +519,22 @@
                     3000
                 );
 
-
             if (!campoBusca) {
                 throw new Error(
                     'Campo de busca da OLT não encontrado'
                 );
             }
 
-
             campoBusca.focus();
-
 
             setNativeInputValue(
                 campoBusca,
                 olt
             );
 
-
             await sleep(
                 250
             );
-
 
             for (
                 const eventType of
@@ -660,29 +543,20 @@
                     'keyup'
                 ]
             ) {
+
                 campoBusca.dispatchEvent(
                     new KeyboardEvent(
                         eventType,
                         {
-                            key:
-                                'ArrowDown',
-
-                            code:
-                                'ArrowDown',
-
-                            keyCode:
-                                40,
-
-                            which:
-                                40,
-
-                            bubbles:
-                                true
+                            key: 'ArrowDown',
+                            code: 'ArrowDown',
+                            keyCode: 40,
+                            which: 40,
+                            bubbles: true
                         }
                     )
                 );
             }
-
 
             const opcao =
                 await esperarElemento(
@@ -698,7 +572,6 @@
                                 []
                             );
 
-
                         const exata =
                             opcoes.find(
                                 btn =>
@@ -708,11 +581,9 @@
                                     oltNormalizada
                             );
 
-
                         if (exata) {
                             return exata;
                         }
-
 
                         if (
                             opcoes.length ===
@@ -721,13 +592,11 @@
                             return opcoes[0];
                         }
 
-
                         return null;
                     },
                     3000,
                     100
                 );
-
 
             if (!opcao) {
                 throw new Error(
@@ -735,9 +604,7 @@
                 );
             }
 
-
             opcao.click();
-
 
             const selecionada =
                 await esperarElemento(
@@ -745,7 +612,6 @@
 
                         const seletorAtual =
                             encontrarSeletorOlt();
-
 
                         if (
                             seletorAtual &&
@@ -757,13 +623,11 @@
                             return seletorAtual;
                         }
 
-
                         return null;
                     },
                     3000,
                     100
                 );
-
 
             if (!selecionada) {
                 throw new Error(
@@ -772,12 +636,12 @@
             }
         }
 
-
         // =================================================================
         // SERIAL
         // =================================================================
 
         function encontrarInputSerial() {
+
             const inputs =
                 Array
                     .from(
@@ -792,7 +656,6 @@
                             ) !==
                             'Buscar OLT...'
                     );
-
 
             const identificado =
                 inputs.find(
@@ -816,13 +679,11 @@
                                     )
                             );
 
-
                         return descricao.includes(
                             'SERIAL'
                         );
                     }
                 );
-
 
             return (
                 identificado
@@ -839,6 +700,111 @@
             );
         }
 
+        // =================================================================
+        // PREENCHE SERIAL
+        // =================================================================
+
+        async function preencherSerial(
+            serial
+        ) {
+
+            const serialInput =
+                await esperarElemento(
+                    encontrarInputSerial,
+                    3000
+                );
+
+            if (!serialInput) {
+                throw new Error(
+                    'Input do serial não encontrado'
+                );
+            }
+
+            serialInput.focus();
+
+            setNativeInputValue(
+                serialInput,
+                serial
+            );
+
+            await sleep(
+                300
+            );
+
+            return serialInput;
+        }
+
+        // =================================================================
+        // CONSULTA DIRETA POR CIDADE
+        //
+        // Utilizada quando o ERP não possui Ponto de Acesso.
+        // =================================================================
+
+        async function consultarDiretamentePorCidade(
+            targetSerial
+        ) {
+
+            console.log(
+                '[RX AUTOMATION] Ponto de acesso vazio. Pulando busca por OLT e consultando diretamente por Cidade.'
+            );
+
+            const cidadeButton =
+                await esperarElemento(
+                    encontrarBotaoModoCidade,
+                    3000
+                );
+
+            if (!cidadeButton) {
+                throw new Error(
+                    'Botão do modo Cidade não encontrado'
+                );
+            }
+
+            cidadeButton.click();
+
+            await sleep(
+                500
+            );
+
+            await preencherSerial(
+                targetSerial
+            );
+
+            const submitBtn =
+                await esperarElemento(
+                    encontrarBotaoConsultar,
+                    3000
+                );
+
+            if (!submitBtn) {
+                throw new Error(
+                    'Botão Consultar não encontrado'
+                );
+            }
+
+            submitBtn.disabled =
+                false;
+
+            submitBtn.click();
+
+            /*
+             * IMPORTANTE:
+             *
+             * Neste caso estamos consultando por Cidade porque
+             * não havia OLT no ERP.
+             *
+             * Portanto, um eventual resultado NÃO deve ser
+             * marcado como "Encontrado em OLT diferente".
+             *
+             * O terceiro parâmetro indica que a consulta está
+             * no modo Cidade, mas não representa divergência.
+             */
+            aguardarResultado(
+                targetSerial,
+                true,
+                false
+            );
+        }
 
         // =================================================================
         // RECEBE REQUISIÇÃO
@@ -861,11 +827,10 @@
                     return;
                 }
 
-
                 let data;
 
-
                 try {
+
                     data =
                         typeof rawData ===
                         'string'
@@ -873,8 +838,10 @@
                                 rawData
                             )
                             : rawData;
+
                 }
                 catch (error) {
+
                     console.error(
                         '[RX AUTOMATION] Requisição inválida:',
                         error
@@ -883,14 +850,33 @@
                     return;
                 }
 
-
                 const {
                     serial,
                     olt
                 } = data;
 
-
                 try {
+
+                    // =====================================================
+                    // NOVA REGRA:
+                    // SEM OLT -> VAI DIRETO PARA CIDADE
+                    // =====================================================
+
+                    if (
+                        !olt ||
+                        !String(olt).trim()
+                    ) {
+
+                        await consultarDiretamentePorCidade(
+                            serial
+                        );
+
+                        return;
+                    }
+
+                    // =====================================================
+                    // COM OLT -> FLUXO NORMAL
+                    // =====================================================
 
                     const oltButton =
                         await esperarElemento(
@@ -898,54 +884,25 @@
                             3000
                         );
 
-
                     if (!oltButton) {
                         throw new Error(
                             'Botão do modo OLT não encontrado'
                         );
                     }
 
-
                     oltButton.click();
-
 
                     await sleep(
                         300
                     );
-
 
                     await selecionarOlt(
                         olt
                     );
 
-
-                    const serialInput =
-                        await esperarElemento(
-                            encontrarInputSerial,
-                            3000
-                        );
-
-
-                    if (!serialInput) {
-                        throw new Error(
-                            'Input do serial não encontrado'
-                        );
-                    }
-
-
-                    serialInput.focus();
-
-
-                    setNativeInputValue(
-                        serialInput,
+                    await preencherSerial(
                         serial
                     );
-
-
-                    await sleep(
-                        300
-                    );
-
 
                     const submitBtn =
                         await esperarElemento(
@@ -953,23 +910,20 @@
                             3000
                         );
 
-
                     if (!submitBtn) {
                         throw new Error(
                             'Botão Consultar não encontrado'
                         );
                     }
 
-
                     submitBtn.disabled =
                         false;
 
-
                     submitBtn.click();
-
 
                     aguardarResultado(
                         serial,
+                        false,
                         false
                     );
 
@@ -981,7 +935,6 @@
                         error
                     );
 
-
                     enviarErro(
                         error.message ||
                         'Falha ao preencher Visor'
@@ -990,9 +943,12 @@
             }
         );
 
-
         // =================================================================
-        // FALLBACK CIDADE
+        // FALLBACK PARA CIDADE
+        //
+        // Este ocorre quando havia uma OLT no ERP, mas a ONT não foi
+        // encontrada nela. Portanto, se a Cidade encontrar a ONT,
+        // temos efetivamente uma OLT diferente.
         // =================================================================
 
         async function tentarConsultaPorCidade(
@@ -1005,15 +961,14 @@
                 motivo
             );
 
-
             const cidadeButton =
                 await esperarElemento(
                     encontrarBotaoModoCidade,
                     3000
                 );
 
-
             if (!cidadeButton) {
+
                 enviarErro(
                     'Timeout (não carregou)'
                 );
@@ -1021,14 +976,19 @@
                 return;
             }
 
-
             cidadeButton.click();
-
 
             await sleep(
                 500
             );
 
+            /*
+             * Reaplica o serial para garantir que o formulário
+             * do modo Cidade esteja com o valor correto.
+             */
+            await preencherSerial(
+                targetSerial
+            );
 
             const submitBtn =
                 await esperarElemento(
@@ -1036,8 +996,8 @@
                     3000
                 );
 
-
             if (!submitBtn) {
+
                 enviarErro(
                     'Timeout (não carregou)'
                 );
@@ -1045,20 +1005,21 @@
                 return;
             }
 
-
             submitBtn.disabled =
                 false;
 
-
             submitBtn.click();
 
-
+            /*
+             * consultaPorCidade = true
+             * marcarOltDiferente = true
+             */
             aguardarResultado(
                 targetSerial,
+                true,
                 true
             );
         }
-
 
         // =================================================================
         // AGUARDA RESULTADO
@@ -1066,16 +1027,15 @@
 
         function aguardarResultado(
             targetSerial,
-            consultaPorCidade = false
+            consultaPorCidade = false,
+            marcarOltDiferente = false
         ) {
 
             let tentativas =
                 0;
 
-
             const maxTentativas =
                 40;
-
 
             const checkInterval =
                 setInterval(
@@ -1083,12 +1043,14 @@
 
                         tentativas++;
 
-
                         try {
 
                             const avisos =
                                 detectarAvisosOntNaoEncontrada();
 
+                            // =================================================
+                            // CIDADE NÃO ENCONTROU
+                            // =================================================
 
                             if (
                                 consultaPorCidade &&
@@ -1099,15 +1061,20 @@
                                     checkInterval
                                 );
 
+                                console.warn(
+                                    '[RX AUTOMATION] ONT não encontrada em nenhuma OLT.'
+                                );
 
                                 enviarErro(
                                     'ONT não encontrada'
                                 );
 
-
                                 return;
                             }
 
+                            // =================================================
+                            // OLT NÃO ENCONTROU
+                            // =================================================
 
                             if (
                                 !consultaPorCidade &&
@@ -1117,7 +1084,6 @@
                                 clearInterval(
                                     checkInterval
                                 );
-
 
                                 tentarConsultaPorCidade(
                                     targetSerial,
@@ -1130,17 +1096,18 @@
                                                 error
                                             );
 
-
                                             enviarErro(
                                                 'Timeout (não carregou)'
                                             );
                                         }
                                     );
 
-
                                 return;
                             }
 
+                            // =================================================
+                            // RX
+                            // =================================================
 
                             const rxLabel =
                                 Array
@@ -1157,7 +1124,6 @@
                                             'POTÊNCIA RX'
                                     );
 
-
                             if (rxLabel) {
 
                                 const resultCard =
@@ -1171,12 +1137,10 @@
                                     ||
                                     document.body;
 
-
                                 const cardText =
                                     normalizarTexto(
                                         resultCard.textContent
                                     );
-
 
                                 if (
                                     cardText.includes(
@@ -1193,13 +1157,11 @@
                                                 '.text-2xl'
                                             );
 
-
                                     if (rxContainer) {
 
                                         clearInterval(
                                             checkInterval
                                         );
-
 
                                         setTimeout(
                                             () => {
@@ -1219,7 +1181,6 @@
                                                                 'POTÊNCIA RX'
                                                         );
 
-
                                                 const containerAtualizado =
                                                     spanAtualizado
                                                         ?.parentElement
@@ -1227,14 +1188,12 @@
                                                             '.text-2xl'
                                                         );
 
-
                                                 const rxValue =
                                                     containerAtualizado
                                                         ?.textContent
                                                         ?.trim()
                                                     ||
                                                     '';
-
 
                                                 if (!rxValue) {
 
@@ -1245,16 +1204,14 @@
                                                     return;
                                                 }
 
-
                                                 enviarResultado(
                                                     rxValue,
-                                                    consultaPorCidade
+                                                    marcarOltDiferente
                                                 );
 
                                             },
                                             1000
                                         );
-
 
                                         return;
                                     }
@@ -1268,20 +1225,20 @@
                                 checkInterval
                             );
 
-
                             console.error(
                                 error
                             );
-
 
                             enviarErro(
                                 'Falha na leitura'
                             );
 
-
                             return;
                         }
 
+                        // =================================================
+                        // TIMEOUT
+                        // =================================================
 
                         if (
                             tentativas >=
@@ -1292,7 +1249,7 @@
                                 checkInterval
                             );
 
-
+                            // OLT -> tenta Cidade
                             if (
                                 !consultaPorCidade
                             ) {
@@ -1308,18 +1265,16 @@
                                                 error
                                             );
 
-
                                             enviarErro(
                                                 'Timeout (não carregou)'
                                             );
                                         }
                                     );
 
-
                                 return;
                             }
 
-
+                            // Cidade -> encerra
                             enviarErro(
                                 'Timeout (não carregou)'
                             );
@@ -1330,10 +1285,8 @@
                 );
         }
 
-
         return;
     }
-
 
     // =====================================================================
     // ERP
@@ -1342,10 +1295,12 @@
     const BUTTON_ID =
         'tm-visor-rx-button-v26';
 
-
     const COPY_BUTTON_ID =
         'tm-visor-rx-copy-button-v26';
 
+    // =====================================================================
+    // ÍCONES
+    // =====================================================================
 
     const EYE_ICON_SVG = `
         <svg
@@ -1363,7 +1318,6 @@
             <circle cx="12" cy="12" r="3"/>
         </svg>
     `;
-
 
     const COPY_ICON_SVG = `
         <svg
@@ -1391,7 +1345,6 @@
         </svg>
     `;
 
-
     // =====================================================================
     // CONTROLE DOS AVISOS
     // =====================================================================
@@ -1408,12 +1361,10 @@
                 btn._rxNoticeTimer
             );
 
-
             btn._rxNoticeTimer =
                 null;
         }
     }
-
 
     function limparEstadoAviso(
         btn
@@ -1423,12 +1374,10 @@
             btn
         );
 
-
         delete btn.dataset.noticeActive;
         delete btn.dataset.noticeType;
         delete btn.dataset.differentOlt;
     }
-
 
     function iniciarTimerAviso(
         btn
@@ -1437,7 +1386,6 @@
         cancelarTimerAviso(
             btn
         );
-
 
         btn._rxNoticeTimer =
             setTimeout(
@@ -1449,7 +1397,6 @@
                     ) {
                         return;
                     }
-
 
                     if (
                         btn.dataset.noticeActive ===
@@ -1466,9 +1413,8 @@
             );
     }
 
-
     // =====================================================================
-    // ESTADOS
+    // ESTADOS DO BOTÃO
     // =====================================================================
 
     function setButtonDefaultState(
@@ -1479,26 +1425,20 @@
             btn
         );
 
-
         delete btn.dataset.loading;
-
 
         btn.innerHTML =
             EYE_ICON_SVG;
 
-
         btn.style.backgroundColor =
             '#22c55e';
-
 
         btn.style.color =
             '#000000';
 
-
         btn.title =
             'Consultar Potência RX no Visor OSIR';
     }
-
 
     function setButtonDifferentOltState(
         btn
@@ -1508,43 +1448,33 @@
             btn
         );
 
-
         delete btn.dataset.loading;
-
 
         btn.dataset.noticeActive =
             'true';
 
-
         btn.dataset.noticeType =
             'different-olt';
-
 
         btn.dataset.differentOlt =
             'true';
 
-
         btn.innerHTML =
             '<span>Encontrado em OLT diferente</span>';
-
 
         btn.style.backgroundColor =
             '#f59e0b';
 
-
         btn.style.color =
             '#111827';
 
-
         btn.title =
             'A ONT foi encontrada em uma OLT diferente.';
-
 
         iniciarTimerAviso(
             btn
         );
     }
-
 
     function setButtonErrorState(
         btn,
@@ -1555,39 +1485,30 @@
             btn
         );
 
-
         delete btn.dataset.loading;
-
 
         btn.dataset.noticeActive =
             'true';
 
-
         btn.dataset.noticeType =
             'error';
-
 
         btn.innerHTML =
             `<span>${mensagem}</span>`;
 
-
         btn.style.backgroundColor =
             '#ef4444';
-
 
         btn.style.color =
             '#ffffff';
 
-
         btn.title =
             mensagem;
-
 
         iniciarTimerAviso(
             btn
         );
     }
-
 
     // =====================================================================
     // CÓPIA MANUAL
@@ -1601,7 +1522,6 @@
             return false;
         }
 
-
         if (
             navigator.clipboard &&
             typeof navigator.clipboard.writeText ===
@@ -1612,55 +1532,42 @@
                 texto
             );
 
-
             return true;
         }
-
 
         const textarea =
             document.createElement(
                 'textarea'
             );
 
-
         textarea.value =
             texto;
-
 
         textarea.style.position =
             'fixed';
 
-
         textarea.style.opacity =
             '0';
 
-
         textarea.style.pointerEvents =
             'none';
-
 
         document.body.appendChild(
             textarea
         );
 
-
         textarea.focus();
-
         textarea.select();
-
 
         const sucesso =
             document.execCommand(
                 'copy'
             );
 
-
         textarea.remove();
-
 
         return sucesso;
     }
-
 
     // =====================================================================
     // BOTÃO COPIAR
@@ -1673,12 +1580,10 @@
                 COPY_BUTTON_ID
             );
 
-
         if (btn) {
             btn.remove();
         }
     }
-
 
     function criarOuAtualizarBotaoCopiar(
         searchBtn,
@@ -1690,7 +1595,6 @@
                 COPY_BUTTON_ID
             );
 
-
         if (!copyBtn) {
 
             copyBtn =
@@ -1698,14 +1602,11 @@
                     'button'
                 );
 
-
             copyBtn.id =
                 COPY_BUTTON_ID;
 
-
             copyBtn.type =
                 'button';
-
 
             copyBtn.style.cssText = `
                 margin-left: 8px;
@@ -1729,26 +1630,22 @@
                 color: #ffffff;
             `;
 
-
             searchBtn.insertAdjacentElement(
                 'afterend',
                 copyBtn
             );
         }
 
-
         copyBtn.dataset.rxValue =
             rxValue;
-
 
         copyBtn.title =
             'Copiar potência RX';
 
-
         copyBtn.innerHTML =
             `${COPY_ICON_SVG}<span>${rxValue}</span>`;
 
-
+        // ÚNICO LOCAL QUE COPIA PARA O CLIPBOARD
         copyBtn.onclick =
             async () => {
 
@@ -1757,11 +1654,9 @@
                     ||
                     '';
 
-
                 if (!valor) {
                     return;
                 }
-
 
                 try {
 
@@ -1769,10 +1664,8 @@
                         valor
                     );
 
-
                     copyBtn.innerHTML =
                         `${COPY_ICON_SVG}<span>Copiado!</span>`;
-
 
                     setTimeout(
                         () => {
@@ -1797,10 +1690,8 @@
                         error
                     );
 
-
                     copyBtn.innerHTML =
                         `${COPY_ICON_SVG}<span>Erro ao copiar</span>`;
-
 
                     setTimeout(
                         () => {
@@ -1820,9 +1711,8 @@
             };
     }
 
-
     // =====================================================================
-    // INJETA BOTÃO
+    // INJETA BOTÃO NO ERP
     // =====================================================================
 
     function injetarBotaoSeNecessario() {
@@ -1832,11 +1722,9 @@
                 '#equipmentSerialNumber'
             );
 
-
         if (!inputEl) {
             return;
         }
-
 
         if (
             document.getElementById(
@@ -1846,12 +1734,10 @@
             return;
         }
 
-
         const container =
             inputEl.closest(
                 '.MuiFormControl-root'
             );
-
 
         if (
             !container ||
@@ -1860,20 +1746,16 @@
             return;
         }
 
-
         const btn =
             document.createElement(
                 'button'
             );
 
-
         btn.id =
             BUTTON_ID;
 
-
         btn.type =
             'button';
-
 
         btn.style.cssText = `
             margin-left: 10px;
@@ -1895,11 +1777,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,.15);
         `;
 
-
         setButtonDefaultState(
             btn
         );
-
 
         // =================================================================
         // HOVER
@@ -1914,7 +1794,6 @@
                     return;
                 }
 
-
                 if (
                     btn.dataset.noticeActive ===
                     'true'
@@ -1922,15 +1801,12 @@
                     return;
                 }
 
-
                 btn.style.backgroundColor =
                     '#16a34a';
-
 
                 btn.style.color =
                     '#000000';
             };
-
 
         btn.onmouseout =
             () => {
@@ -1941,7 +1817,6 @@
                     return;
                 }
 
-
                 if (
                     btn.dataset.noticeActive ===
                     'true'
@@ -1949,12 +1824,10 @@
                     return;
                 }
 
-
                 setButtonDefaultState(
                     btn
                 );
             };
-
 
         // =================================================================
         // NOVA CONSULTA
@@ -1971,11 +1844,9 @@
                     return;
                 }
 
-
                 limparEstadoAviso(
                     btn
                 );
-
 
                 const serialValue =
                     inputEl.value
@@ -1983,28 +1854,27 @@
                     ||
                     '';
 
-
                 if (!serialValue) {
 
                     setButtonDefaultState(
                         btn
                     );
 
-
                     alert(
                         'O campo do serial está vazio!'
                     );
 
-
                     return;
                 }
 
+                // =========================================================
+                // PONTO DE ACESSO
+                // =========================================================
 
                 const oltEl =
                     document.querySelector(
                         '#authenticationAccessPointId'
                     );
-
 
                 const rawOlt =
                     oltEl
@@ -2016,49 +1886,59 @@
                         )
                         : '';
 
-
                 const oltTraduzida =
                     traduzirAccessPoint(
                         rawOlt
                     );
 
-
                 console.log(
-                    '[RX AUTOMATION] Access Point:',
-                    rawOlt
+                    '[RX AUTOMATION] Ponto de acesso:',
+                    rawOlt || '(vazio)'
                 );
-
 
                 console.log(
                     '[RX AUTOMATION] OLT traduzida:',
-                    oltTraduzida
+                    oltTraduzida || '(nenhuma - usar Cidade)'
                 );
 
+                // =========================================================
+                // LIMPA RESULTADO ANTERIOR
+                // =========================================================
 
                 removerBotaoCopiar();
 
+                // =========================================================
+                // LOADING
+                // =========================================================
 
                 btn.dataset.loading =
                     'true';
 
-
                 btn.innerHTML =
                     '<span style="font-size:18px;letter-spacing:2px;">...</span>';
-
 
                 btn.style.backgroundColor =
                     '#eab308';
 
-
                 btn.style.color =
                     '#000000';
 
+                // =========================================================
+                // ENVIA PARA VISOR
+                // =========================================================
 
                 const payload =
                     JSON.stringify({
                         serial:
                             serialValue,
 
+                        /*
+                         * Se o ponto estiver vazio,
+                         * envia string vazia.
+                         *
+                         * O Visor detectará isso e irá
+                         * diretamente para Cidade.
+                         */
                         olt:
                             oltTraduzida,
 
@@ -2066,12 +1946,10 @@
                             Date.now()
                     });
 
-
                 GM_setValue(
                     REQUEST_KEY,
                     ''
                 );
-
 
                 setTimeout(
                     () => {
@@ -2087,7 +1965,6 @@
             }
         );
 
-
         // =================================================================
         // LAYOUT
         // =================================================================
@@ -2095,17 +1972,14 @@
         container.parentNode.style.display =
             'flex';
 
-
         container.parentNode.style.alignItems =
             'center';
-
 
         container.parentNode.insertBefore(
             btn,
             container.nextSibling
         );
     }
-
 
     // =====================================================================
     // OBSERVER
@@ -2120,24 +1994,18 @@
             }
         );
 
-
     observer.observe(
         document.body,
         {
-            childList:
-                true,
-
-            subtree:
-                true
+            childList: true,
+            subtree: true
         }
     );
 
-
     injetarBotaoSeNecessario();
 
-
     // =====================================================================
-    // RESULTADO
+    // RECEBE RESULTADO
     // =====================================================================
 
     GM_addValueChangeListener(
@@ -2157,20 +2025,16 @@
                 return;
             }
 
-
             const btn =
                 document.getElementById(
                     BUTTON_ID
                 );
 
-
             if (!btn) {
                 return;
             }
 
-
             let resultado;
-
 
             try {
 
@@ -2187,13 +2051,10 @@
                     error
                 );
 
-
                 return;
             }
 
-
             delete btn.dataset.loading;
-
 
             // =================================================================
             // ERRO
@@ -2206,7 +2067,6 @@
 
                 removerBotaoCopiar();
 
-
                 setButtonErrorState(
                     btn,
                     resultado.mensagem
@@ -2214,10 +2074,8 @@
                     'ERRO: Falha na consulta'
                 );
 
-
                 return;
             }
-
 
             // =================================================================
             // SUCESSO
@@ -2235,27 +2093,24 @@
                     )
                         .trim();
 
-
                 if (!rxValue) {
 
                     removerBotaoCopiar();
-
 
                     setButtonErrorState(
                         btn,
                         'ERRO: Valor RX em branco'
                     );
 
-
                     return;
                 }
 
-
+                // Apenas exibe o botão.
+                // NÃO copia automaticamente.
                 criarOuAtualizarBotaoCopiar(
                     btn,
                     rxValue
                 );
-
 
                 if (
                     resultado.oltDiferente ===
@@ -2265,6 +2120,7 @@
                     setButtonDifferentOltState(
                         btn
                     );
+
                 }
                 else {
 
@@ -2274,7 +2130,7 @@
                 }
             }
 
-
+            // Limpa apenas o canal de comunicação.
             setTimeout(
                 () => {
 
