@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Aproprias
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      8.7
+// @version      8.9
 // @description  Apropriação automática
 // @author       AlissonGuerreiro & Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/workspace/activities
@@ -9,6 +9,7 @@
 // @exclude      https://chat.osirnet.com.br/*
 // @exclude      https://erp.osirnet.com.br/ui/*/legacy/operations/*
 // @exclude      https://ygo.osirnet.com.br/*
+// @exclude      https://erp.osirnet.com.br/authentication_contracts/contract_panel/*
 // @grant        none
 // @run-at       document-end
 // @license      MIT
@@ -20,6 +21,42 @@
 
 (function () {
     'use strict';
+
+    // =========================================================
+    // PROTEÇÕES DE CONTEXTO
+    // =========================================================
+    //
+    // 1. Não executa dentro do iframe da autenticação.
+    // 2. Não executa em nenhuma página contract_panel, com ou
+    //    sem o fragmento final #.
+    //
+    // O @exclude abaixo evita a injeção quando o Tampermonkey
+    // consegue aplicar a regra diretamente. As verificações em
+    // runtime permanecem como segunda camada de proteção.
+    // =========================================================
+
+    function executandoNoFrameDeAutenticacao() {
+        if (window.self === window.top) {
+            return false;
+        }
+
+        return window.location.pathname.startsWith(
+            '/authentication_contracts/get_authentication_informations/'
+        );
+    }
+
+    function executandoNoContractPanel() {
+        return window.location.pathname.startsWith(
+            '/authentication_contracts/contract_panel/'
+        );
+    }
+
+    if (
+        executandoNoFrameDeAutenticacao() ||
+        executandoNoContractPanel()
+    ) {
+        return;
+    }
 
     // =========================================================
     // CONFIGURAÇÕES
@@ -154,12 +191,14 @@
         // VERIFICA SE A PÁGINA POSSUI A TABELA
         // =====================================================
 
-        if (
-            window.self === window.top &&
-            document.querySelectorAll('iframe').length > 0
-        ) {
-            return;
-        }
+        /*
+         * A proteção principal contra o iframe de autenticação
+         * acontece no início do script.
+         *
+         * Esta checagem antiga dependia da página principal ter
+         * um iframe visível e, por isso, não funcionava quando
+         * o próprio script já estava sendo executado dentro dele.
+         */
 
         const tabelaExiste =
             document.getElementById('assignmentTasks') ||
