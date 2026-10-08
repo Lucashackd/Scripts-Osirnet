@@ -7,8 +7,8 @@
 // @match        https://erp.osirnet.com.br/authentication_contracts/contract_panel/*
 // @license      MIT
 // @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Drawer%20de%20Autentica%C3%A7%C3%A3o%20no%20Contract%20Panel.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Drawer%20de%20Autentica%C3%A7%C3%A3o%20no%20Contract%20Panel.user.js
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
