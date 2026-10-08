@@ -1,10 +1,15 @@
 // ==UserScript==
 // @name         Osir - Drawer de Autenticação no Contract Panel
-// @namespace    https://erp.osirnet.com.br/
+// @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      2.3
 // @description  Abre a autenticação em Drawer, preservando o comportamento nativo do ERP e o estado da página.
+// @author       Lucashackd
 // @match        https://erp.osirnet.com.br/authentication_contracts/contract_panel/*
-// @grant        none
+// @license      MIT
+// @homepageURL  https://github.com/Lucashackd/Scripts-Osirnet
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/
+// @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
 // ==/UserScript==
 
 (function () {
