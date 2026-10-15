@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - ERP Consultor de Sinal no Visor
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      2.8
+// @version      2.9
 // @description  Consulta a potência RX no Visor OSIR e permite copiar manualmente o resultado
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/ui/*/legacy/operations/**
