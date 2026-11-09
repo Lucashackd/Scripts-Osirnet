@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Assistente de Cadastro TIP Brasil MVNO
+// @name         Osir - Assistente de Cadastro TIP Brasil MVNO
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
 // @version      3.0.0
 // @description  Copia dados do ERP, preenche automaticamente no MVNO TIP Brasil (clone do Tatelecom) e gera máscara de portabilidade
