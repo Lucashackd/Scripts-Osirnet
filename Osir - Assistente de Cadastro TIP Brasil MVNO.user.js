@@ -15,8 +15,8 @@
 // @license      MIT
 // @homepage     https://github.com/AlissonGuerreiro/meus-scripts
 // @supportURL   https://github.com/AlissonGuerreiro/meus-scripts/issues
-// @downloadURL
-// @updateURL 
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO.user.js
 // ==/UserScript==
 
 (function() {
