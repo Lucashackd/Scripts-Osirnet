@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Assistente de Cadastro TIP Brasil MVNO
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      3.0.0
+// @version      3.1.0
 // @description  Copia dados do ERP, preenche automaticamente no MVNO TIP Brasil (clone do Tatelecom) e gera máscara de portabilidade
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/*
@@ -605,7 +605,7 @@
         cpf: ['CPF', 'CPF/CNPJ', 'Documento'],
         nascimento: ['Data Nascimento', 'Data de Nascimento', 'Nascimento'],
         email: ['Email', 'E-mail'],
-        telefone: ['Telefone', 'Telefone Provisório', 'Número Provisório', 'Nº Telefone Provisório', 'Número da Linha', 'Linha', 'MSISDN'],
+        telefone: ['Nº Telefone', 'Telefone', 'Telefone Provisório', 'Número Provisório', 'Nº Telefone Provisório', 'Número da Linha', 'Linha', 'MSISDN'],
         iccid: ['ICCID', 'SimCard', 'SIM Card', 'Chip'],
         plano: ['Plano'],
         dataPortabilidade: ['Data Prevista', 'Data Prevista da Portabilidade', 'Data da Portabilidade'],
@@ -615,7 +615,7 @@
 
     function normalizarTexto(t) {
         return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/\s+/g, ' ').trim().toLowerCase();
+            .replace(/[º°]/g, 'o').replace(/\s+/g, ' ').trim().toLowerCase();
     }
 
     // Texto visível da página em linhas (ignora a janela da máscara, se estiver aberta)
