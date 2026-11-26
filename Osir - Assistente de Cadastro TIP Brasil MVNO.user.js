@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Assistente de Cadastro TIP Brasil MVNO
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      3.1.0
+// @version      3.2.0
 // @description  Copia dados do ERP, preenche automaticamente no MVNO TIP Brasil (clone do Tatelecom) e gera máscara de portabilidade
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/*
@@ -22,7 +22,7 @@
 (function() {
     'use strict';
 
-    const VERSAO = '3.0.0';
+    const VERSAO = '3.2.0';
     const HOST = window.location.hostname;
 
     const isERP = HOST.includes('erp.osirnet.com.br');
@@ -941,7 +941,8 @@ Ciente da Data Prevista? SIM (X) NÃO ( )`;
                 return;
             }
 
-            const textoTecnico = `📱 Número Provisório: ${dadosTecnico.telefone || 'N/A'}
+            const textoTecnico = `🆔 Iccid: ${dadosTecnico.iccid || 'N/A'}
+📱 Número Provisório: ${dadosTecnico.telefone || 'N/A'}
 📞 Número Portado: ${dadosTecnico.numeroPortado || 'N/A'}
 📅 Data Prevista: ${dadosTecnico.dataPortabilidade || 'N/A'}`;
 
@@ -1281,7 +1282,7 @@ Ciente da Data Prevista? SIM (X) NÃO ( )`;
     setTimeout(injetarTudo, 1500);
     setTimeout(injetarTudo, 3000);
 
-    console.log(`🚀 Assistente de Cadastro v${VERSAO} carregado!`);
+    console.log(`🚀 Assistente de Cadastro v${} carregado!`);
     console.log('📌 Modo:', isERP ? 'ERP' : isTatelecom ? 'Sistema de cadastro (TIP/Tatelecom)' : 'Outro');
     console.log('🔇 Sem notificações - feedback visual nos botões');
     console.log('📊 Logs disponíveis no console (F12)');
