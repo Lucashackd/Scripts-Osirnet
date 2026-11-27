@@ -15,8 +15,8 @@
 // @license      MIT
 // @homepage     https://github.com/Lucashackd/Scripts-Osirnet
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO%20Teste.user.js
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO%20Teste.user.js
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO.user.js
 // ==/UserScript==
 
 (function() {
