@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Osir - Assistente de Cadastro TIP Brasil MVNO
 // @namespace    https://github.com/Lucashackd/Scripts-Osirnet
-// @version      3.1.0
+// @version      3.2.0
 // @description  Copia dados do ERP, preenche automaticamente no MVNO TIP Brasil (clone do Tatelecom) e gera máscara de portabilidade
 // @author       Lucashackd
 // @match        https://erp.osirnet.com.br/*
@@ -15,14 +15,14 @@
 // @license      MIT
 // @homepage     https://github.com/Lucashackd/Scripts-Osirnet
 // @supportURL   https://github.com/Lucashackd/Scripts-Osirnet/issues
-// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO.user.js
-// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO.user.js
+// @downloadURL  https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO%20Teste.user.js
+// @updateURL    https://raw.githubusercontent.com/Lucashackd/Scripts-Osirnet/main/Osir%20-%20Assistente%20de%20Cadastro%20TIP%20Brasil%20MVNO%20Teste.user.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const VERSAO = '3.0.0';
+    const VERSAO = '3.2.0';
     const HOST = window.location.hostname;
 
     const isERP = HOST.includes('erp.osirnet.com.br');
@@ -941,7 +941,8 @@ Ciente da Data Prevista? SIM (X) NÃO ( )`;
                 return;
             }
 
-            const textoTecnico = `📱 Número Provisório: ${dadosTecnico.telefone || 'N/A'}
+            const textoTecnico = `🆔 Iccid: ${dadosTecnico.iccid || 'N/A'}
+📱 Número Provisório: ${dadosTecnico.telefone || 'N/A'}
 📞 Número Portado: ${dadosTecnico.numeroPortado || 'N/A'}
 📅 Data Prevista: ${dadosTecnico.dataPortabilidade || 'N/A'}`;
 
@@ -1068,6 +1069,7 @@ Ciente da Data Prevista? SIM (X) NÃO ( )`;
     // Menu do Tampermonkey: atalhos que funcionam em qualquer tela do sistema
     function debugPagina() {
         console.group('🐞 Assistente - debug');
+        console.log('Diagnóstico:', diagnosticoInjecao());
         console.log('URL:', window.location.href);
         console.log('Linhas de texto da página:', linhasDaPagina());
         console.log('Dados extraídos:', extrairDadosHistorico());
@@ -1251,6 +1253,7 @@ Ciente da Data Prevista? SIM (X) NÃO ( )`;
     // ============================================
     if (typeof GM_registerMenuCommand === 'function' && isTatelecom) {
         GM_registerMenuCommand('📋 Gerar máscara de portabilidade', gerarMascaraPortabilidade);
+        GM_registerMenuCommand('🔄 Reinjetar botões', () => { injetarTudo(); diagnosticoInjecao(); });
         GM_registerMenuCommand('🐞 Debug: mostrar leitura da página no console', debugPagina);
     }
 
@@ -1276,10 +1279,29 @@ Ciente da Data Prevista? SIM (X) NÃO ( )`;
         }, 250);
     }
 
-    new MutationObserver(agendarInjecao).observe(document.body, { childList: true, subtree: true });
+    // documentElement (e não body): sobrevive se a página trocar o <body> inteiro
+    new MutationObserver(agendarInjecao).observe(document.documentElement, { childList: true, subtree: true });
 
     setTimeout(injetarTudo, 1500);
     setTimeout(injetarTudo, 3000);
+    // Rede de segurança: reinjeta se o sistema apagar os botões sem gerar mutação observável
+    setInterval(injetarTudo, 2000);
+
+    // Resumo do que o script enxerga na página (aparece no console, F12)
+    function diagnosticoInjecao() {
+        const info = {
+            url: window.location.href,
+            modo: isERP ? 'ERP' : (isTatelecom ? 'Cadastro (TIP/Tatelecom)' : 'Outro'),
+            campoCpfEncontrado: !!primeiro('input#input_cpf', 'input[wire\\:model\\.defer="input_cpf"]'),
+            botaoColarCpfPresente: !!document.getElementById('btn-preenche-cpf'),
+            formularioSalvaDadosEncontrado: !!primeiro('form[wire\\:submit\\.prevent*="salvar"]', '#input_nome'),
+            botaoPreenchimentoCompletoPresente: !!document.getElementById('btn-auto-tudo'),
+            dadosDoErpSalvos: !!lerDadosSalvos().nome
+        };
+        console.log('🔎 [Assistente] diagnóstico:', info);
+        return info;
+    }
+    setTimeout(diagnosticoInjecao, 4000);
 
     console.log(`🚀 Assistente de Cadastro v${VERSAO} carregado!`);
     console.log('📌 Modo:', isERP ? 'ERP' : isTatelecom ? 'Sistema de cadastro (TIP/Tatelecom)' : 'Outro');
